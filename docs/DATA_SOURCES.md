@@ -134,8 +134,8 @@ unreachable from the sandbox. Full run via `make all SOURCE=csv`:
 | Stage          | Result                                                   |
 |----------------|----------------------------------------------------------|
 | points         | 1,738,088 units kept; 20 unparseable, 135 out of range   |
-| polygons       | 10,819 sectors, 2,948 districts, 121 areas in 105 s      |
-| tiles          | boundaries.pmtiles 69 MB, units.pmtiles 70 MB            |
+| polygons       | 10,879 sectors, 2,942 districts, 121 areas in 107 s      |
+| tiles          | boundaries.pmtiles 79 MB, units.pmtiles 70 MB            |
 | index          | 2,958 district files, 57 MB                              |
 
 The app was exercised headlessly at all four levels, plus search, hover and

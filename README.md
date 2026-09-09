@@ -68,7 +68,7 @@ Sizes to expect from a full GB build:
 
 | File                          | Size    |
 |-------------------------------|---------|
-| `tiles/boundaries.pmtiles`    | ~70 MB  |
+| `tiles/boundaries.pmtiles`    | ~80 MB  |
 | `tiles/units.pmtiles`         | ~70 MB  |
 | `data/` search index          | ~60 MB across ~3,000 small JSON files |
 | app bundle                    | < 1 MB  |

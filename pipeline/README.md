@@ -67,7 +67,8 @@ eastings/northings are transformed from EPSG:27700 with pyproj.
    points far outside the UK keep every real cell finite.
 2. Where several units share one location, the sector with most units there
    owns the cell. Sectors whose units *all* coincide with another sector's
-   (a handful of large-user postcodes in central London) get no polygon; they
+   (PO-box and large-user sectors such as BS99 or EC3P, 232 in the 2017 test
+   data, fewer with Code-Point Open which drops them upstream) get no polygon; they
    are listed in `report.json` and remain searchable through the unit index.
 3. Cells are dissolved to sectors, sectors to districts, districts to areas
    with GEOS coverage unions (exact shared edges, so no slivers).
@@ -105,8 +106,8 @@ search is made.
 | Stage           | Time   | Output                                  |
 |-----------------|--------|-----------------------------------------|
 | build_points    | 7 s    | units.csv, 1,738,088 rows (98 MB)       |
-| build_polygons  | 105 s  | 10,819 sectors, 2,948 districts, 121 areas; 40 MB GeoJSON |
-| build_tiles     | ~4 min | boundaries.pmtiles 69 MB, units.pmtiles 70 MB |
+| build_polygons  | 107 s  | 10,879 sectors, 2,942 districts, 121 areas; 40 MB GeoJSON |
+| build_tiles     | ~4 min | boundaries.pmtiles 79 MB, units.pmtiles 70 MB |
 | build_index     | 20 s   | 2,958 district files, 57 MB             |
 
 Peak memory is about 4 GB during the Voronoi step.
