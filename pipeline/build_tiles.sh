@@ -33,7 +33,7 @@ tippecanoe --force -r1 --no-tile-size-limit --no-feature-limit -o "$TMP/area_lab
 tippecanoe --force -r1 --no-tile-size-limit --no-feature-limit -o "$TMP/district_labels.pmtiles" -l district_labels -Z6 -z12 "$POLY_DIR/districts_labels.geojsonl"
 tippecanoe --force -r1 --no-tile-size-limit --no-feature-limit -o "$TMP/sector_labels.pmtiles"   -l sector_labels   -Z9 -z12 "$POLY_DIR/sectors_labels.geojsonl"
 
-tile-join --force -o "$OUT_DIR/boundaries.pmtiles" --name="UK postcode boundaries (derived)" --attribution="$ATTR" \
+tile-join --force -o "$OUT_DIR/boundaries.pmtiles" --name="GB postcode boundaries (derived)" --attribution="$ATTR" \
   "$TMP/areas.pmtiles" "$TMP/districts.pmtiles" "$TMP/sectors.pmtiles" \
   "$TMP/area_lines.pmtiles" "$TMP/district_lines.pmtiles" "$TMP/sector_lines.pmtiles" \
   "$TMP/area_labels.pmtiles" "$TMP/district_labels.pmtiles" "$TMP/sector_labels.pmtiles"
@@ -41,7 +41,7 @@ tile-join --force -o "$OUT_DIR/boundaries.pmtiles" --name="UK postcode boundarie
 # Units: every point, tiled at z13 only and overzoomed by MapLibre beyond it.
 tippecanoe --force -o "$OUT_DIR/units.pmtiles" -l units -Z13 -z13 -B13 -r1 \
   --no-feature-limit --no-tile-size-limit \
-  --name="UK unit postcode centroids" --attribution="$ATTR" \
+  --name="GB unit postcode centroids" --attribution="$ATTR" \
   -y postcode -y sector -y district -y area "$UNITS_CSV"
 
 ls -la "$OUT_DIR"

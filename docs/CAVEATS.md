@@ -32,8 +32,9 @@ What "derived" means in practice:
 - Where the pipeline could not download the ONS coastline it clips to a
   dilated 1 km grid of the points instead. That is visible as a stepped
   coast and is recorded in `report.json` as `"mask": "grid"`.
-- Isle of Man, Guernsey and Jersey (IM, GY, JE) are not in Code-Point Open
-  or ONSPD and do not appear.
+- Northern Ireland is absent for licensing reasons (see below). Isle of Man,
+  Guernsey and Jersey (IM, GY, JE) are not in Code-Point Open or ONSPD and
+  do not appear. The map is therefore of Great Britain, and is named so.
 
 ## Licences
 

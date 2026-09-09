@@ -42,7 +42,7 @@ export default {
     fallbackBackground: "#e8ecef",
   },
 
-  initialBounds: [-8.7, 49.8, 1.9, 60.9], // whole UK
+  initialBounds: [-7.8, 49.8, 1.9, 60.9], // Great Britain incl. Shetland and the Hebrides
   fonts: ["Noto Sans Bold"],
 
   // Polygons are outline-only (fillOpacity 0); the invisible fill still

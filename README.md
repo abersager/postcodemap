@@ -1,10 +1,23 @@
-# UK postcode map
+# GB postcode map
 
-An interactive map of UK postcodes that reveals more detail as you zoom in:
+An interactive map of Great Britain's postcodes that reveals more detail as you zoom in:
 postcode **areas** (SW, EH) → **districts** (SW1A, EH12) → **sectors**
 (SW1A 2) → **unit** postcodes (SW1A 2AA). Layers swap automatically by zoom
 level. It is a fully static site: MapLibre GL JS reading PMTiles over HTTP
 range requests, no backend, no API keys.
+
+## Coverage: Great Britain, not the UK
+
+England, Scotland and Wales. Northern Ireland is not on the map because no
+open dataset of its postcode locations exists: Code-Point Open stops at the
+Irish Sea, and the ONS Postcode Directory carries BT postcodes only under a
+Northern Ireland End User Licence that forbids public redistribution, which
+a published map is. The one open alternative (postcodes harvested from Food
+Hygiene Rating Scheme business records) covers only postcodes that contain a
+food business, with the business's coordinates rather than the postcode's,
+so it was not used. Isle of Man and the Channel Islands have their own
+postcode systems outside Code-Point Open. See
+[docs/CAVEATS.md](docs/CAVEATS.md).
 
 Everything is built from open data. **Only the unit centroids are official**
 (OS Code-Point Open / Royal Mail). The area, district and sector polygons are

@@ -1,7 +1,7 @@
 [project]
 name = "postcodemap-pipeline"
 version = "0.1.0"
-description = "Data pipeline for the UK postcode map: derives postcode polygons from open unit centroids and tiles them."
+description = "Data pipeline for the GB postcode map: derives postcode polygons from open unit centroids and tiles them."
 requires-python = ">=3.10"
 license = "MIT"
 dependencies = [

@@ -1,4 +1,4 @@
-# UK postcode map data pipeline.
+# GB postcode map data pipeline.
 #
 #   make            download + build everything (needs tippecanoe, uv, curl)
 #   make sample     quick build of a few areas (SAMPLE_AREAS) for development

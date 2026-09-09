@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Interactive UK postcode map: areas, districts, sectors and units revealed by zoom level. Static, MapLibre + PMTiles.",
+  "description": "Interactive GB postcode map: areas, districts, sectors and units revealed by zoom level. Static, MapLibre + PMTiles.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
