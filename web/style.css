@@ -22,6 +22,8 @@ html, body { margin: 0; height: 100%; font: 14px/1.4 system-ui, -apple-system, "
 #legend .row small { margin-left: auto; font-size: 11px; }
 #legend .row.active { background: #eef3f8; color: #1f2933; font-weight: 600; }
 #legend .swatch { width: 14px; height: 14px; border-radius: 3px; border: 2px solid currentColor; box-sizing: border-box; }
+#density { margin-top: 6px; font-size: 11px; color: #6b7684; }
+#density:empty { display: none; }
 #hover { margin-top: 6px; min-height: 1.2em; font-size: 13px; color: #1f2933; border-top: 1px solid #e3e7eb; padding-top: 6px; }
 #hover:empty { display: none; }
 

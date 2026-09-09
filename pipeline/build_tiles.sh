@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Tile the derived polygons and unit points into two PMTiles archives.
 #
-#   boundaries.pmtiles  areas, districts, sectors (+ label points)   ~ tens of MB
+#   boundaries.pmtiles  areas, districts, sectors polygons, their interior
+#                       boundary lines and label points               ~ tens of MB
 #   units.pmtiles       1.7M unit centroids from z12                 ~ hundreds of MB
 #
 # Zoom ranges are deliberately wider than the app's default thresholds so the
@@ -21,12 +22,17 @@ common=(--force --detect-shared-borders --no-tile-size-limit --no-feature-limit 
 tippecanoe "${common[@]}" -o "$TMP/areas.pmtiles"     -l areas     -Z0 -z12 --simplification=4 "$POLY_DIR/areas.geojsonl"
 tippecanoe "${common[@]}" -o "$TMP/districts.pmtiles" -l districts -Z5 -z14 --simplification=4 "$POLY_DIR/districts.geojsonl"
 tippecanoe "${common[@]}" -o "$TMP/sectors.pmtiles"   -l sectors   -Z8 -z14 --simplification=4 "$POLY_DIR/sectors.geojsonl"
+lines=(--force --no-tile-size-limit --no-feature-limit --simplification=4 --attribution="$ATTR")
+tippecanoe "${lines[@]}" -o "$TMP/area_lines.pmtiles"     -l area_lines     -Z0 -z12 "$POLY_DIR/areas_lines.geojsonl"
+tippecanoe "${lines[@]}" -o "$TMP/district_lines.pmtiles" -l district_lines -Z5 -z14 "$POLY_DIR/districts_lines.geojsonl"
+tippecanoe "${lines[@]}" -o "$TMP/sector_lines.pmtiles"   -l sector_lines   -Z8 -z14 "$POLY_DIR/sectors_lines.geojsonl"
 tippecanoe --force -r1 --no-tile-size-limit --no-feature-limit -o "$TMP/area_labels.pmtiles"     -l area_labels     -Z0 -z10 "$POLY_DIR/areas_labels.geojsonl"
 tippecanoe --force -r1 --no-tile-size-limit --no-feature-limit -o "$TMP/district_labels.pmtiles" -l district_labels -Z5 -z12 "$POLY_DIR/districts_labels.geojsonl"
 tippecanoe --force -r1 --no-tile-size-limit --no-feature-limit -o "$TMP/sector_labels.pmtiles"   -l sector_labels   -Z8 -z14 "$POLY_DIR/sectors_labels.geojsonl"
 
 tile-join --force -o "$OUT_DIR/boundaries.pmtiles" --name="UK postcode boundaries (derived)" --attribution="$ATTR" \
   "$TMP/areas.pmtiles" "$TMP/districts.pmtiles" "$TMP/sectors.pmtiles" \
+  "$TMP/area_lines.pmtiles" "$TMP/district_lines.pmtiles" "$TMP/sector_lines.pmtiles" \
   "$TMP/area_labels.pmtiles" "$TMP/district_labels.pmtiles" "$TMP/sector_labels.pmtiles"
 
 # Units: keep every point from z13 up; at z12 drop the densest only if a tile

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the static search index consumed by the web app.
 
-  <out>/index.json           {"areas":{code:[minx,miny,maxx,maxy]}, "districts":..., "sectors":...}
+  <out>/index.json           {"areas":{code:[minx,miny,maxx,maxy,units,km2]}, "districts":..., "sectors":...}
   <out>/units/<DISTRICT>.json {"SW1A 2AA":[lon,lat], ...}   one file per district
 """
 import argparse
@@ -16,7 +16,7 @@ def bboxes(path):
     with open(path) as f:
         for line in f:
             p = json.loads(line)["properties"]
-            out[p["code"]] = [p["minx"], p["miny"], p["maxx"], p["maxy"]]
+            out[p["code"]] = [p["minx"], p["miny"], p["maxx"], p["maxy"], p["units"], p.get("km2", 0)]
     return out
 
 

@@ -82,26 +82,31 @@ eastings/northings are transformed from EPSG:27700 with pyproj.
    occupancy grid of the points dilated by 2 km (visibly blocky at the
    coast, flagged as `"mask": "grid"` in `report.json`). Unit locations that
    fall outside the mask get a 250 m buffer added so nothing disappears.
-   The coastline is made solid first: countries containing no postcodes are
+   The coastline is prepared first: countries containing no postcodes are
    dropped (Northern Ireland with Code-Point Open, otherwise Scottish cells
-   would claim its land), inland water smaller than 4 km² is filled, and
-   channels narrower than 400 m are closed (`CLOSE_M`, `MIN_HOLE_M2` in the
-   script). Without that, the ONS boundary follows tidal rivers inland and
-   slices polygons along every estuary. The prepared mask is cached in
-   `data/build/mask-cache.pkl` and reused until the coastline file changes.
-5. Writes newline-delimited GeoJSON per level, plus label points (centre of
+   would claim its land) and inland water smaller than 4 km² is filled
+   (`MIN_HOLE_M2`). The prepared mask is cached in `data/build/mask-cache.pkl`
+   and reused until the coastline file changes.
+5. Boundary *lines* are written separately from the polygons
+   (`*_lines.geojsonl`): the edges shared by two polygons of a level, clipped
+   to land. They never follow the coast, so the map draws postcode
+   boundaries only and leaves the coastline to the basemap. The polygons
+   (which do follow the ONS coast, tidal rivers included) are used for
+   hover, click and search highlighting.
+6. Writes newline-delimited GeoJSON per level, plus label points (centre of
    the largest inscribed circle of the biggest part) with the same
-   properties: `code`, `level`, `units` (count), `minx/miny/maxx/maxy`
-   (WGS84 bbox, used for click-to-zoom and search), `parent`, `area`,
-   `district`.
+   properties: `code`, `level`, `units` (count), `km2` (land area),
+   `minx/miny/maxx/maxy` (WGS84 bbox, used for click-to-zoom and search),
+   `parent`, `area`, `district`.
 
 ### 3. `build_tiles.sh`
 
 One tippecanoe run per layer, then `tile-join` into two archives:
 
 - `boundaries.pmtiles`: `areas` (z0–12), `districts` (z5–14), `sectors`
-  (z8–14) and the matching `*_labels` point layers. `--detect-shared-borders`
-  keeps neighbouring polygons consistent when simplified.
+  (z8–14) polygons, the matching `*_lines` boundary layers and `*_labels`
+  point layers. `--detect-shared-borders` keeps neighbouring polygons
+  consistent when simplified.
 - `units.pmtiles`: `units` points z12–14. Nothing is dropped from z13 up;
   at z12 the densest points are thinned only if a tile would exceed 500 KB.
   MapLibre overzooms z14 tiles for street-level views.
@@ -109,7 +114,8 @@ One tippecanoe run per layer, then `tile-join` into two archives:
 ### 4. `build_index.py`
 
 Static search index: `index.json` maps every area, district and sector code
-to its bbox; `units/<DISTRICT>.json` maps each unit in that district to
+to `[minx, miny, maxx, maxy, units, km2]` (the app also uses units/km2 to
+adapt the zoom thresholds to postcode density); `units/<DISTRICT>.json` maps each unit in that district to
 `[lon, lat]`. The app loads a district file on demand when a unit-level
 search is made.
 
@@ -119,7 +125,7 @@ search is made.
 |-----------------|--------|-----------------------------------------|
 | build_points    | 7 s    | units.csv, 1,738,088 rows (98 MB)       |
 | build_polygons  | 107 s  | 10,879 sectors, 2,942 districts, 121 areas; 40 MB GeoJSON |
-| build_tiles     | ~4 min | boundaries.pmtiles 79 MB, units.pmtiles 70 MB |
+| build_tiles     | ~5 min | boundaries.pmtiles 96 MB, units.pmtiles 70 MB |
 | build_index     | 20 s   | 2,958 district files, 57 MB             |
 
 Peak memory is about 4 GB during the Voronoi step. Preparing the ONS coastline

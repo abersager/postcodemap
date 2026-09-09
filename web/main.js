@@ -6,11 +6,14 @@ import CONFIG from "./config.js";
 const LEVELS = ["area", "district", "sector", "unit"];
 const SOURCE_LAYER = { area: "areas", district: "districts", sector: "sectors", unit: "units" };
 const LABEL_LAYER = { area: "area_labels", district: "district_labels", sector: "sector_labels" };
+const LINE_LAYER = { area: "area_lines", district: "district_lines", sector: "sector_lines" };
 
-// zoom range [min, max) for each level, derived from the thresholds
+// zoom range [min, max) for each level, derived from the thresholds plus the
+// current density shift (see CONFIG.density)
+let densityShift = 0;
 function zoomRange(level) {
-  const t = CONFIG.thresholds;
-  return { area: [0, t.district], district: [t.district, t.sector], sector: [t.sector, t.unit], unit: [t.unit, 24] }[level];
+  const t = CONFIG.thresholds, d = densityShift;
+  return { area: [0, t.district + d], district: [t.district + d, t.sector + d], sector: [t.sector + d, t.unit + d], unit: [t.unit + d, 24] }[level];
 }
 function levelAt(zoom) {
   return LEVELS.find((l) => zoom < zoomRange(l)[1]) ?? "unit";
@@ -83,8 +86,10 @@ map.on("load", () => {
         "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], CONFIG.hoverFillOpacity, s.fillOpacity],
       },
     });
+    // Boundaries between polygons only; the coast is left to the basemap.
     map.addLayer({
-      id: `${level}-line`, type: "line", source: "boundaries", "source-layer": SOURCE_LAYER[level], minzoom, maxzoom,
+      id: `${level}-line`, type: "line", source: "boundaries", "source-layer": LINE_LAYER[level], minzoom, maxzoom,
+      layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": s.color, "line-width": s.lineWidth, "line-opacity": 0.9 },
     });
     map.addLayer({
@@ -114,7 +119,7 @@ map.on("load", () => {
 
   // Sector boundaries stay visible (thin) under the unit points for context.
   map.addLayer({
-    id: "sector-context-line", type: "line", source: "boundaries", "source-layer": "sectors", minzoom: uMin,
+    id: "sector-context-line", type: "line", source: "boundaries", "source-layer": "sector_lines", minzoom: uMin,
     paint: { "line-color": CONFIG.levels.sector.color, "line-width": 1, "line-opacity": 0.5, "line-dasharray": [3, 2] },
   }, "unit-circle");
 
@@ -129,7 +134,47 @@ map.on("load", () => {
 
   wireInteraction();
   updateLegend();
+  map.on("moveend", updateDensityShift);
+  updateDensityShift();
 });
+
+// Re-derive every layer's zoom range from the thresholds and the density shift.
+function applyZoomRanges() {
+  for (const level of ["area", "district", "sector"]) {
+    const [lo, hi] = zoomRange(level);
+    for (const suffix of ["fill", "line", "label"]) map.setLayerZoomRange(`${level}-${suffix}`, lo, hi);
+  }
+  const [uMin] = zoomRange("unit");
+  for (const id of ["unit-circle", "unit-label", "sector-context-line"]) map.setLayerZoomRange(id, uMin, 24);
+}
+
+// Units per km2 of the smallest district whose bbox contains the map centre.
+function densityAtCentre() {
+  if (!index) return null;
+  const { lng, lat } = map.getCenter();
+  let best = null;
+  for (const code in index.districts) {
+    const e = index.districts[code];
+    if (lng < e[0] || lng > e[2] || lat < e[1] || lat > e[3] || !e[5]) continue;
+    const size = (e[2] - e[0]) * (e[3] - e[1]);
+    if (!best || size < best.size) best = { code, size, density: e[4] / e[5] };
+  }
+  return best;
+}
+
+function updateDensityShift() {
+  const cfg = CONFIG.density;
+  let shift = 0, info = null;
+  if (cfg?.enabled) {
+    info = densityAtCentre();
+    if (info) shift = Math.round(Math.min(cfg.maxShift, Math.max(0, Math.log10(info.density / cfg.baseUnitsPerKm2))) * 2) / 2;
+  }
+  densityEl.textContent = info ? `${info.code}: ${Math.round(info.density).toLocaleString()} postcodes/km²${shift ? `, levels shifted +${shift}` : ""}` : "";
+  if (shift === densityShift) return;
+  densityShift = shift;
+  applyZoomRanges();
+  updateLegend();
+}
 window.__map = map; // handy in the console
 
 // ---------------------------------------------------------------------------
@@ -200,6 +245,7 @@ function setHighlight(level, code) {
 // Legend
 // ---------------------------------------------------------------------------
 const zoomEl = document.getElementById("zoom");
+const densityEl = document.getElementById("density");
 function updateLegend() {
   const z = map.getZoom();
   const current = levelAt(z);
@@ -209,15 +255,15 @@ function updateLegend() {
     row.classList.toggle("active", level === current);
     row.style.color = level === current ? CONFIG.levels[level].color : "";
     row.querySelector("small").textContent = b >= 24 ? `z ≥ ${a}` : a === 0 ? `z < ${b}` : `z ${a}–${b}`;
+    row.dataset.min = a;
   }
   zoomEl.textContent = `(zoom ${z.toFixed(1)})`;
 }
 map.on("zoom", updateLegend);
 for (const row of document.querySelectorAll("#legend .row")) {
-  const [a] = zoomRange(row.dataset.level);
   row.style.cursor = "pointer";
   row.title = "Zoom to this level";
-  row.addEventListener("click", () => map.easeTo({ zoom: a + 0.15 }));
+  row.addEventListener("click", () => map.easeTo({ zoom: zoomRange(row.dataset.level)[0] + 0.15 }));
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +276,7 @@ const msg = document.getElementById("msg");
 
 let index = null; // { areas: {code: bbox}, districts: {...}, sectors: {...} }
 const indexReady = fetch(abs(CONFIG.searchIndex)).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-  .then((j) => (index = j)).catch((e) => console.warn("Search index unavailable:", e));
+  .then((j) => { index = j; if (map.loaded()) updateDensityShift(); }).catch((e) => console.warn("Search index unavailable:", e));
 
 const unitCache = new Map();
 async function unitsOf(district) {

@@ -36,6 +36,8 @@ make sample SAMPLE_AREAS=SW,W,WC,EC
 
 - Zoom to change level. The legend (bottom left) shows the active level and
   the zoom band of each; click a legend row to jump to that level.
+- Only boundaries between postcodes are drawn; the coast comes from the
+  basemap.
 - Hover a polygon or point to highlight it and see its code and unit count.
 - Click a polygon to zoom into it at the next level. Click a unit for a popup.
 - Search any fragment: `SW`, `EH12`, `SW1A 2`, `SW1A 2AA`, or a partial unit
@@ -49,7 +51,13 @@ Everything tunable is in [`web/config.js`](web/config.js):
 
 ```js
 thresholds: { district: 8, sector: 11, unit: 13 }   // areas below 8, units from 13
+density: { enabled: true, baseUnitsPerKm2: 40, maxShift: 2 }
 ```
+
+The thresholds shift upwards in dense places (by log10 of the local
+postcode density over `baseUnitsPerKm2`, up to `maxShift`), so central London
+switches to sectors and units two zoom levels later than the countryside.
+The legend shows the density under the map centre and the shift applied.
 
 Also there: tile and index URLs, basemap style URL, colours, opacities, label
 sizes and the attribution string. Thresholds can be moved anywhere inside the
@@ -68,7 +76,7 @@ Sizes to expect from a full GB build:
 
 | File                          | Size    |
 |-------------------------------|---------|
-| `tiles/boundaries.pmtiles`    | ~80 MB  |
+| `tiles/boundaries.pmtiles`    | ~100 MB |
 | `tiles/units.pmtiles`         | ~70 MB  |
 | `data/` search index          | ~60 MB across ~3,000 small JSON files |
 | app bundle                    | < 1 MB  |

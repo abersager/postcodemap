@@ -12,6 +12,14 @@
 export default {
   thresholds: { district: 8, sector: 11, unit: 13 },
 
+  // Dense places need more zoom before the next level is readable. The
+  // thresholds above are shifted up by log10(density / baseUnitsPerKm2),
+  // capped at maxShift and rounded to 0.5, where density is the unit
+  // postcodes per km2 of the district under the map centre. With the
+  // defaults, a rural district (< 40/km2) gets no shift, a suburb (~400/km2)
+  // +1 and central London (> 4000/km2) +2. Set enabled: false to disable.
+  density: { enabled: true, baseUnitsPerKm2: 40, maxShift: 2 },
+
   // Where the PMTiles archives and the search index are served from. Relative
   // paths resolve against the page URL; use absolute URLs to host the (large)
   // tiles on object storage while the app sits on GitHub Pages.

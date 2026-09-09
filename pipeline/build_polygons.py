@@ -129,24 +129,22 @@ def dissolve(geoms, keys):
 # ----------------------------------------------------------------------------
 # 3. mask
 # ----------------------------------------------------------------------------
-CLOSE_M = 200.0      # fills water channels narrower than 2 x this (tidal rivers, harbours)
 MIN_HOLE_M2 = 4e6    # inland water bodies smaller than this are filled
 
 
 def fill_water(g):
-    """Make the land mask solid: drop small lakes and close narrow rivers.
-    The ONS coastline follows mean high water up tidal rivers, which would
-    otherwise slice postcode polygons into parts along every estuary and draw
-    river banks as if they were boundaries."""
+    """Fill small lakes so polygons are not perforated by inland water.
+    Coastal water is left exactly as the ONS boundary has it: closing rivers
+    morphologically was tried and it bridged real straits (Menai, Poole
+    Harbour entrance). Coast-following edges are not drawn anyway; see
+    interior_lines()."""
     parts = []
     for p in shapely.get_parts(g):
         if p.geom_type != "Polygon":
             continue
         holes = [h for h in p.interiors if shapely.Polygon(h).area >= MIN_HOLE_M2]
         parts.append(shapely.Polygon(p.exterior, holes))
-    g = shapely.union_all(parts)
-    g = shapely.buffer(shapely.buffer(g, CLOSE_M, quad_segs=2), -CLOSE_M, quad_segs=2)
-    return shapely.make_valid(g)
+    return shapely.make_valid(shapely.union_all(parts))
 
 
 def load_coastline(path, xy, cache=None):
@@ -155,7 +153,7 @@ def load_coastline(path, xy, cache=None):
     source is Code-Point Open) are dropped, otherwise the Voronoi cells of the
     nearest GB postcodes would claim their land. Prepared features are cached
     in `cache` (invalidated when the coastline file or parameters change)."""
-    key = f"{os.path.getmtime(path)}:{os.path.getsize(path)}:{CLOSE_M}:{MIN_HOLE_M2}"
+    key = f"{os.path.getmtime(path)}:{os.path.getsize(path)}:v2:{MIN_HOLE_M2}"
     prepared = None
     if cache and os.path.exists(cache):
         with open(cache, "rb") as f:
@@ -249,7 +247,45 @@ class Clipper:
 
 
 # ----------------------------------------------------------------------------
-# 4. output
+# 4. interior boundary lines
+# ----------------------------------------------------------------------------
+def interior_lines(polys, clipper):
+    """Edges between different polygons of one level, clipped to land, with
+    no coast-following edges. Built from the unclipped polygons: their only
+    edges are Voronoi edges, so intersecting with the land mask leaves exactly
+    the inter-polygon boundaries on land."""
+    segs = []
+    for g in polys.values():
+        for ring in shapely.get_rings(shapely.get_parts(g)):
+            c = shapely.get_coordinates(ring)
+            segs.append(np.hstack([c[:-1], c[1:]]))
+    segs = np.vstack(segs)
+    # canonical orientation so a shared edge stored twice dedupes to one
+    flip = (segs[:, 0] > segs[:, 2]) | ((segs[:, 0] == segs[:, 2]) & (segs[:, 1] > segs[:, 3]))
+    segs[flip] = segs[flip][:, [2, 3, 0, 1]]
+    segs, counts = np.unique(np.round(segs, 3), axis=0, return_counts=True)
+    shared = segs[counts > 1]  # an edge on the outer hull (towards the sentinels) appears once
+    lines = shapely.linestrings(shared.reshape(-1, 2, 2))
+    # clip to land
+    li, pi = clipper.tree.query(lines, predicate="intersects")
+    clipped = shapely.intersection(lines[li], clipper.pieces[pi])
+    clipped = clipped[~shapely.is_empty(clipped)]
+    parts = [g for g in shapely.get_parts(clipped) if g.geom_type == "LineString"]
+    merged = shapely.line_merge(shapely.multilinestrings(parts)) if parts else shapely.MultiLineString()
+    return [g for g in shapely.get_parts(merged) if g.length > 0]
+
+
+def write_lines(out_dir, level, lines):
+    path = os.path.join(out_dir, f"{level}_lines.geojsonl")
+    with open(path, "w") as fp:
+        for g in lines:
+            gw = to_wgs(g)
+            fp.write(json.dumps({"type": "Feature", "properties": {"level": level[:-1]}, "geometry": json.loads(shapely.to_geojson(gw))}, separators=(",", ":")) + "\n")
+    log(f"wrote {len(lines)} {level} boundary lines")
+
+
+# ----------------------------------------------------------------------------
+# 5. output
 # ----------------------------------------------------------------------------
 def label_point(geom):
     parts = shapely.get_parts(geom)
@@ -274,7 +310,7 @@ def write_level(out_dir, level, polys, parent_of, counts, extra_props):
             gw = to_wgs(g)
             lw = to_wgs(label_point(g))
             minx, miny, maxx, maxy = gw.bounds
-            props = {"code": code, "level": level[:-1], "units": counts[code],
+            props = {"code": code, "level": level[:-1], "units": counts[code], "km2": round(g.area / 1e6, 3),
                      "minx": round(minx, 5), "miny": round(miny, 5), "maxx": round(maxx, 5), "maxy": round(maxy, 5)}
             props.update(extra_props(code))
             if parent_of:
@@ -362,6 +398,9 @@ def main():
     log(f"clipped districts ({len(lost_d)} lost)")
     are_c, lost_a = clip_all(are)
     log(f"clipped areas ({len(lost_a)} lost)")
+
+    for level, unclipped in (("areas", are), ("districts", dis), ("sectors", sec)):
+        write_lines(a.out, level, interior_lines(unclipped, clipper))
 
     write_level(a.out, "areas", are_c, None, counts, lambda c: {})
     write_level(a.out, "districts", dis_c, area_of, counts, lambda c: {"area": area_of(c)})
