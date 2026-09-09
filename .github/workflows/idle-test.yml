@@ -1,9 +1,0 @@
-name: idle connection test (temporary)
-on: { workflow_dispatch: {} }
-jobs:
-  idle:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install urllib3
-      - run: python .github/idle_test.py
