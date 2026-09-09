@@ -5,10 +5,10 @@
 //   district : thresholds.district <= zoom < thresholds.sector
 //   sector   : thresholds.sector   <= zoom < thresholds.unit
 //   unit     : zoom >= thresholds.unit
-// The tiles carry each level over a wider zoom range than these defaults
-// (areas z0-12, districts z5-14, sectors z8-14, units z12-14, overzoomed
-// beyond) so you can move thresholds freely inside those ranges without
-// re-tiling. See pipeline/build_tiles.sh if you need to go further.
+// The tiles carry areas z0-10, districts z6-12, sectors z9-12 and units at
+// z13, and MapLibre overzooms beyond each range, so thresholds can move up
+// freely (the density shift relies on that) but not below district 6,
+// sector 9, unit 13 without re-tiling. See pipeline/build_tiles.sh.
 export default {
   thresholds: { district: 8, sector: 11, unit: 13 },
 

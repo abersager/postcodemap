@@ -76,16 +76,19 @@ Sizes to expect from a full GB build:
 
 | File                          | Size    |
 |-------------------------------|---------|
-| `tiles/boundaries.pmtiles`    | ~100 MB |
-| `tiles/units.pmtiles`         | ~70 MB  |
+| `tiles/boundaries.pmtiles`    | ~30 MB  |
+| `tiles/units.pmtiles`         | ~22 MB  |
 | `data/` search index          | ~60 MB across ~3,000 small JSON files |
 | app bundle                    | < 1 MB  |
 
 Tiles are fetched in small ranges on demand, so visitors never download the
-whole archive. If your host has a per-file size limit, host the two
-`.pmtiles` files elsewhere (any object storage with CORS + range support)
-and point `tiles.boundaries` / `tiles.units` in `web/config.js` at their
-absolute URLs.
+whole archive. GitHub Pages' CDN, though, pulls a whole file on a cold range
+request and caches it for only ten minutes, so the first visitor at each
+edge location waits a few seconds; that is why the archives are kept small.
+For consistently fast loads, or if your host has a per-file size limit, host
+the two `.pmtiles` files on object storage with a long cache TTL (Cloudflare
+R2, S3 + CloudFront) and point `tiles.boundaries` / `tiles.units` in
+`web/config.js` at their absolute URLs.
 
 An optional GitHub Actions workflow,
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml), builds the data

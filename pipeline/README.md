@@ -103,13 +103,16 @@ eastings/northings are transformed from EPSG:27700 with pyproj.
 
 One tippecanoe run per layer, then `tile-join` into two archives:
 
-- `boundaries.pmtiles`: `areas` (z0–12), `districts` (z5–14), `sectors`
-  (z8–14) polygons, the matching `*_lines` boundary layers and `*_labels`
+- `boundaries.pmtiles`: `areas` (z0–10), `districts` (z6–12), `sectors`
+  (z9–12) polygons, the matching `*_lines` boundary layers and `*_labels`
   point layers. `--detect-shared-borders` keeps neighbouring polygons
-  consistent when simplified.
-- `units.pmtiles`: `units` points z12–14. Nothing is dropped from z13 up;
-  at z12 the densest points are thinned only if a tile would exceed 500 KB.
-  MapLibre overzooms z14 tiles for street-level views.
+  consistent when simplified. MapLibre overzooms z12 tiles for closer views;
+  boundary lines are straight Voronoi edges, so that costs nothing visible.
+- `units.pmtiles`: every `units` point at z13, overzoomed beyond.
+
+Zoom ranges are kept tight on purpose: GitHub Pages' CDN fetches a whole
+file on a cold range request and caches it for only ten minutes, so archive
+size directly sets how long the first visitor waits.
 
 ### 4. `build_index.py`
 
@@ -125,7 +128,7 @@ search is made.
 |-----------------|--------|-----------------------------------------|
 | build_points    | 7 s    | units.csv, 1,738,088 rows (98 MB)       |
 | build_polygons  | 107 s  | 10,879 sectors, 2,942 districts, 121 areas; 40 MB GeoJSON |
-| build_tiles     | ~5 min | boundaries.pmtiles 96 MB, units.pmtiles 70 MB |
+| build_tiles     | ~3 min | boundaries.pmtiles 30 MB, units.pmtiles 22 MB |
 | build_index     | 20 s   | 2,958 district files, 57 MB             |
 
 Peak memory is about 4 GB during the Voronoi step. Preparing the ONS coastline
