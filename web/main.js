@@ -48,6 +48,15 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right");
 
+// Keep the legend above the attribution bar however many lines it wraps to.
+{
+  const legend = document.getElementById("legend");
+  const attrib = document.querySelector(".maplibregl-ctrl-bottom-right");
+  const place = () => { legend.style.bottom = `${Math.ceil(attrib.getBoundingClientRect().height) + 12}px`; };
+  new ResizeObserver(place).observe(attrib);
+  place();
+}
+
 // ---------------------------------------------------------------------------
 // Layers
 // ---------------------------------------------------------------------------
