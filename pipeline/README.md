@@ -82,6 +82,13 @@ eastings/northings are transformed from EPSG:27700 with pyproj.
    occupancy grid of the points dilated by 2 km (visibly blocky at the
    coast, flagged as `"mask": "grid"` in `report.json`). Unit locations that
    fall outside the mask get a 250 m buffer added so nothing disappears.
+   The coastline is made solid first: countries containing no postcodes are
+   dropped (Northern Ireland with Code-Point Open, otherwise Scottish cells
+   would claim its land), inland water smaller than 4 km² is filled, and
+   channels narrower than 400 m are closed (`CLOSE_M`, `MIN_HOLE_M2` in the
+   script). Without that, the ONS boundary follows tidal rivers inland and
+   slices polygons along every estuary. The prepared mask is cached in
+   `data/build/mask-cache.pkl` and reused until the coastline file changes.
 5. Writes newline-delimited GeoJSON per level, plus label points (centre of
    the largest inscribed circle of the biggest part) with the same
    properties: `code`, `level`, `units` (count), `minx/miny/maxx/maxy`
@@ -115,8 +122,8 @@ search is made.
 | build_tiles     | ~4 min | boundaries.pmtiles 79 MB, units.pmtiles 70 MB |
 | build_index     | 20 s   | 2,958 district files, 57 MB             |
 
-Peak memory is about 4 GB during the Voronoi step. Loading and validating the
-ONS coastline adds about 40 s to every polygon build, sample builds included.
+Peak memory is about 4 GB during the Voronoi step. Preparing the ONS coastline
+takes about 30 s the first time and is cached afterwards.
 
 ## Alternative polygon inputs
 

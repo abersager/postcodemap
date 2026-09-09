@@ -79,7 +79,7 @@ $(UNITS): $(INPUT) pipeline/build_points.py pipeline/postcode.py
 
 polygons: $(POLYS)/sectors.geojsonl
 $(POLYS)/sectors.geojsonl: $(UNITS) pipeline/build_polygons.py
-	$(PYTHON) pipeline/build_polygons.py $(UNITS) --out $(POLYS) --report $(BUILD)/report.json $$( [ -s "$(COASTLINE)" ] && echo --coastline "$(COASTLINE)" )
+	$(PYTHON) pipeline/build_polygons.py $(UNITS) --out $(POLYS) --report $(BUILD)/report.json $$( [ -s "$(COASTLINE)" ] && echo --coastline "$(COASTLINE)" --mask-cache data/build/mask-cache.pkl )
 
 # Tiles and index are always (re)written into web/public so the app serves the
 # most recent build, sample or full.

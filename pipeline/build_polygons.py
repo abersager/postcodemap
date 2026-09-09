@@ -20,6 +20,7 @@ import argparse
 import csv
 import json
 import os
+import pickle
 import sys
 import time
 from collections import defaultdict
@@ -128,14 +129,70 @@ def dissolve(geoms, keys):
 # ----------------------------------------------------------------------------
 # 3. mask
 # ----------------------------------------------------------------------------
-def load_coastline(path):
-    with open(path) as f:
-        gj = json.load(f)
-    feats = gj["features"] if gj.get("type") == "FeatureCollection" else [gj]
-    geoms = [shapely.from_geojson(json.dumps(ft["geometry"])) for ft in feats if ft.get("geometry")]
-    g = shapely.union_all([shapely.make_valid(x) for x in geoms])
-    g = shapely.transform(g, lambda c: np.column_stack(TO_BNG.transform(c[:, 0], c[:, 1])))
+CLOSE_M = 200.0      # fills water channels narrower than 2 x this (tidal rivers, harbours)
+MIN_HOLE_M2 = 4e6    # inland water bodies smaller than this are filled
+
+
+def fill_water(g):
+    """Make the land mask solid: drop small lakes and close narrow rivers.
+    The ONS coastline follows mean high water up tidal rivers, which would
+    otherwise slice postcode polygons into parts along every estuary and draw
+    river banks as if they were boundaries."""
+    parts = []
+    for p in shapely.get_parts(g):
+        if p.geom_type != "Polygon":
+            continue
+        holes = [h for h in p.interiors if shapely.Polygon(h).area >= MIN_HOLE_M2]
+        parts.append(shapely.Polygon(p.exterior, holes))
+    g = shapely.union_all(parts)
+    g = shapely.buffer(shapely.buffer(g, CLOSE_M, quad_segs=2), -CLOSE_M, quad_segs=2)
     return shapely.make_valid(g)
+
+
+def load_coastline(path, xy, cache=None):
+    """Union of the prepared coastline features that contain at least one unit
+    point. Countries with no postcodes in the input (Northern Ireland when the
+    source is Code-Point Open) are dropped, otherwise the Voronoi cells of the
+    nearest GB postcodes would claim their land. Prepared features are cached
+    in `cache` (invalidated when the coastline file or parameters change)."""
+    key = f"{os.path.getmtime(path)}:{os.path.getsize(path)}:{CLOSE_M}:{MIN_HOLE_M2}"
+    prepared = None
+    if cache and os.path.exists(cache):
+        with open(cache, "rb") as f:
+            blob = pickle.load(f)
+        if blob.get("key") == key:
+            prepared = blob["features"]
+            log("coastline: using cached prepared mask")
+    if prepared is None:
+        with open(path) as f:
+            gj = json.load(f)
+        feats = gj["features"] if gj.get("type") == "FeatureCollection" else [gj]
+        prepared = []
+        for ft in feats:
+            if not ft.get("geometry"):
+                continue
+            name = next((v for k, v in ft.get("properties", {}).items() if k.upper().endswith("NM")), "?")
+            g = shapely.make_valid(shapely.from_geojson(json.dumps(ft["geometry"])))
+            g = shapely.make_valid(shapely.transform(g, lambda c: np.column_stack(TO_BNG.transform(c[:, 0], c[:, 1]))))
+            g = fill_water(g)
+            prepared.append((name, shapely.to_wkb(g)))
+            log(f"coastline: prepared {name}")
+        if cache:
+            with open(cache, "wb") as f:
+                pickle.dump({"key": key, "features": prepared}, f)
+    pts = shapely.points(xy[:: max(1, len(xy) // 200000)])  # a sample is enough to detect presence
+    keep, dropped = [], []
+    for name, wkb in prepared:
+        g = shapely.from_wkb(wkb)
+        if shapely.intersects(g, pts).any():
+            keep.append(g)
+        else:
+            dropped.append(name)
+    if dropped:
+        log(f"coastline: dropping features with no postcodes: {', '.join(dropped)}")
+    if not keep:
+        sys.exit("coastline: no feature contains any postcode; wrong file or projection?")
+    return shapely.make_valid(shapely.union_all(keep))
 
 
 def grid_mask(xy, cell=1000.0, dilate=2):
@@ -233,6 +290,7 @@ def main():
     ap.add_argument("units")
     ap.add_argument("--out", required=True)
     ap.add_argument("--coastline", help="GeoJSON (WGS84) land polygons used as clip mask")
+    ap.add_argument("--mask-cache", help="Pickle file caching the prepared coastline mask between builds")
     ap.add_argument("--report", help="Write a JSON build report here")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
@@ -272,7 +330,7 @@ def main():
     mask_source = "grid"
     if a.coastline:
         log("loading coastline")
-        mask = load_coastline(a.coastline)
+        mask = load_coastline(a.coastline, uxy, a.mask_cache)
         mask_source = "coastline"
     else:
         log("no coastline given: building occupancy-grid mask (derived, blobby coast)")

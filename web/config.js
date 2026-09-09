@@ -37,13 +37,15 @@ export default {
   initialBounds: [-8.7, 49.8, 1.9, 60.9], // whole UK
   fonts: ["Noto Sans Bold"],
 
+  // Polygons are outline-only (fillOpacity 0); the invisible fill still
+  // receives hover and click. hoverFillOpacity tints the hovered polygon.
   levels: {
-    area:     { color: "#7b3294", fillOpacity: 0.18, lineWidth: 2.0, textSize: 16 },
-    district: { color: "#c2185b", fillOpacity: 0.16, lineWidth: 1.5, textSize: 13 },
-    sector:   { color: "#0571b0", fillOpacity: 0.14, lineWidth: 1.2, textSize: 12 },
+    area:     { color: "#7b3294", fillOpacity: 0, lineWidth: 2.0, textSize: 16 },
+    district: { color: "#c2185b", fillOpacity: 0, lineWidth: 1.5, textSize: 13 },
+    sector:   { color: "#0571b0", fillOpacity: 0, lineWidth: 1.2, textSize: 12 },
     unit:     { color: "#e66101", circleRadius: 4, textSize: 11 },
   },
-  hoverFillOpacity: 0.45,
+  hoverFillOpacity: 0.12,
 
   attribution:
     'Contains OS data &copy; Crown copyright and database right 2026 &middot; ' +

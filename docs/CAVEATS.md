@@ -24,6 +24,10 @@ What "derived" means in practice:
   have their own sector, e.g. W1A) either have no coordinates and are
   dropped, or share a location with ordinary postcodes and get no polygon.
   `data/build/report.json` lists them after each build.
+- Water narrower than 400 m and lakes under 4 km² are treated as land when
+  clipping, so tidal rivers do not cut polygons into parts. Wide estuaries
+  (Thames, Humber, Severn, Solent, the Scottish firths) do split them, which
+  matches how postcodes work on opposite banks.
 - Where the pipeline could not download the ONS coastline it clips to a
   dilated 1 km grid of the points instead. That is visible as a stepped
   coast and is recorded in `report.json` as `"mask": "grid"`.
