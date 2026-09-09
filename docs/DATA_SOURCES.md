@@ -1,12 +1,19 @@
 # Data sources: findings and plan
 
-Investigated 2026-09-09. "Verified live" below means the source's download
-endpoint or catalogue entry was confirmed current at that date. This session's
-sandbox could only reach GitHub, npm and PyPI directly, so the OS, ONS and
-doogal endpoints were confirmed through their public catalogue pages and
-third-party documentation rather than by downloading from them here. The
-pipeline was exercised end to end on a GitHub-hosted 2017 snapshot of the same
-centroid data (see "Local test run" at the bottom).
+Investigated 2026-09-09. The initial investigation ran in a sandbox that could
+only reach GitHub, npm and PyPI, so the OS, ONS and doogal endpoints were first
+confirmed through catalogue pages and third-party documentation, and the
+pipeline was exercised on a GitHub-hosted 2017 snapshot of the centroid data
+(see "Local test run"). Later the same day `make sample` was run on a normal
+network connection and hit the live sources directly:
+
+- OS Downloads API served Code-Point Open dataset version 2026.3.0
+  (copyright date 2026-07-20, Royal Mail update 2026-07-17), 13.7 MB.
+- The ArcGIS catalogue search discovered "Countries (December 2025)
+  Boundaries UK BGC" and the feature service returned 4 country polygons as
+  GeoJSON, 13 MB.
+- The sample build (SW, W, WC, EC) then completed with the coastline mask:
+  44,676 units, 422 sectors, 94 districts, 4 areas.
 
 ## Summary
 

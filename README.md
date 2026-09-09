@@ -15,12 +15,12 @@ exist. See [docs/CAVEATS.md](docs/CAVEATS.md) before relying on a boundary and
 
 ## Quick start
 
-Requirements: Python 3.10+, Node 18+, `tippecanoe` (≥ 2.17, for PMTiles
-output), `curl`. Installing tippecanoe: `brew install tippecanoe` on macOS, or
-build from source on Linux (see [pipeline/README.md](pipeline/README.md)).
+Requirements: [uv](https://docs.astral.sh/uv/) (manages Python and the
+pipeline's dependencies), Node 18+, `tippecanoe` (≥ 2.17, for PMTiles
+output), `curl`. On macOS: `brew install uv tippecanoe`; on Linux build
+tippecanoe from source (see [pipeline/README.md](pipeline/README.md)).
 
 ```bash
-pip install -r pipeline/requirements.txt
 npm install
 make            # downloads Code-Point Open + ONS coastline, builds tiles + search index (~10 min)
 npm run dev     # http://localhost:5173
@@ -87,6 +87,7 @@ and deploys `dist/` to GitHub Pages. It runs on manual dispatch only.
 
 ```
 Makefile              orchestrates the pipeline (make, make sample, make clean)
+pyproject.toml        Python dependencies for the pipeline (uv.lock pins them)
 pipeline/             download, clean, derive polygons, tile, index  (see pipeline/README.md)
 web/                  the app: index.html, main.js, config.js, style.css
 web/public/tiles/     generated PMTiles (gitignored)

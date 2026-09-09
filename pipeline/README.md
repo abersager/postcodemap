@@ -17,8 +17,12 @@ ONS coastline GeoJSON ──────────────── build_pol
 
 ## Tools
 
-- Python 3.10+ with `pip install -r pipeline/requirements.txt` (numpy, scipy,
-  shapely ≥ 2.0, pyproj).
+- [uv](https://docs.astral.sh/uv/) (`brew install uv`). Dependencies (numpy,
+  scipy, shapely ≥ 2.0, pyproj) are declared in `pyproject.toml` and pinned in
+  `uv.lock`; the Makefile runs every script through `uv run python`, which
+  creates `.venv/` and installs them on first use. Add a dependency with
+  `uv add <package>`. To use another interpreter, override `PYTHON`, e.g.
+  `make PYTHON="poetry run python"`.
 - [tippecanoe](https://github.com/felt/tippecanoe) ≥ 2.17 (writes `.pmtiles`
   directly; 2.78 was used here). macOS: `brew install tippecanoe`. Linux:
 
@@ -42,6 +46,7 @@ Variables (set on the command line):
 
 | Variable        | Default                                   | Notes                                                    |
 |-----------------|-------------------------------------------|----------------------------------------------------------|
+| `PYTHON`        | `uv run python`                           | interpreter used for every pipeline script               |
 | `SOURCE`        | `codepoint`                               | `codepoint`, `onspd` or `csv`                            |
 | `CODEPOINT_URL` | OS Downloads API CSV URL                  | no key needed                                            |
 | `ONSPD_ZIP`     | `data/raw/onspd.zip`                      | download manually from the ONS Open Geography Portal     |
@@ -110,7 +115,8 @@ search is made.
 | build_tiles     | ~4 min | boundaries.pmtiles 79 MB, units.pmtiles 70 MB |
 | build_index     | 20 s   | 2,958 district files, 57 MB             |
 
-Peak memory is about 4 GB during the Voronoi step.
+Peak memory is about 4 GB during the Voronoi step. Loading and validating the
+ONS coastline adds about 40 s to every polygon build, sample builds included.
 
 ## Alternative polygon inputs
 

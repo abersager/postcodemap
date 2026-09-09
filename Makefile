@@ -1,20 +1,28 @@
 # UK postcode map data pipeline.
 #
-#   make            download + build everything (needs tippecanoe, python3, curl, unzip)
+#   make            download + build everything (needs tippecanoe, uv, curl)
 #   make sample     quick build of a few areas (SAMPLE_AREAS) for development
 #   make clean      remove generated data (keeps downloads)
 #
-# Inputs (override on the command line, e.g. `make SOURCE=onspd ONSPD_ZIP=...`):
-SOURCE        ?= codepoint          # codepoint | onspd | csv
+# Inputs (override on the command line, e.g. `make SOURCE=onspd ONSPD_ZIP=...`).
+# Keep comments on their own lines: make keeps trailing spaces in values.
+#
+# SOURCE: codepoint | onspd | csv
+SOURCE        ?= codepoint
 CODEPOINT_URL ?= https://api.os.uk/downloads/v1/products/CodePointOpen/downloads?area=GB&format=CSV&redirect
 CODEPOINT_ZIP ?= data/raw/codepo_gb.zip
-ONSPD_ZIP     ?= data/raw/onspd.zip # download manually from https://geoportal.statistics.gov.uk/ (search "ONS Postcode Directory")
-CSV_FILE      ?=                    # any postcode,lat,lon CSV (or zip of one) when SOURCE=csv
-INCLUDE_NI    ?= 0                  # 1 to keep Northern Ireland from ONSPD (separate licence, see docs/CAVEATS.md)
+# ONSPD_ZIP: download manually from https://geoportal.statistics.gov.uk/ (search "ONS Postcode Directory")
+ONSPD_ZIP     ?= data/raw/onspd.zip
+# CSV_FILE: any postcode,lat,lon CSV (or zip of one) when SOURCE=csv
+CSV_FILE      ?=
+# INCLUDE_NI: 1 keeps Northern Ireland rows from ONSPD (separate licence, see docs/CAVEATS.md)
+INCLUDE_NI    ?= 0
 COASTLINE     ?= data/raw/coastline.geojson
-COASTLINE_URL ?=                    # leave empty to auto-discover the newest ONS "Countries ... UK BGC" layer
+# COASTLINE_URL: leave empty to auto-discover the newest ONS "Countries ... UK BGC" layer
+COASTLINE_URL ?=
 SAMPLE_AREAS  ?= SW,W,WC,EC
-PYTHON        ?= python3
+# PYTHON: interpreter for the pipeline scripts; deps come from pyproject.toml / uv.lock
+PYTHON        ?= uv run python
 
 BUILD   ?= data/build
 WEBPUB  := web/public
@@ -46,7 +54,8 @@ sample:
 check-tools:
 	@command -v tippecanoe >/dev/null || { echo "tippecanoe not found: see pipeline/README.md"; exit 1; }
 	@command -v tile-join  >/dev/null || { echo "tile-join not found (ships with tippecanoe)"; exit 1; }
-	@$(PYTHON) -c "import shapely, scipy, pyproj, numpy" 2>/dev/null || { echo "python deps missing: pip install -r pipeline/requirements.txt"; exit 1; }
+	@command -v uv >/dev/null || { echo "uv not found: https://docs.astral.sh/uv/getting-started/installation/"; exit 1; }
+	@$(PYTHON) -c "import shapely, scipy, pyproj, numpy" 2>/dev/null || { echo "python deps could not be installed (uv sync failed?)"; exit 1; }
 
 download: $(INPUT)
 

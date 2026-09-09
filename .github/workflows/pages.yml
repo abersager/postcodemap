@@ -19,8 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
+      - uses: astral-sh/setup-uv@v6
+        with: { enable-cache: true }
       - uses: actions/setup-node@v4
         with: { node-version: "22", cache: npm }
       - name: Install tippecanoe
@@ -28,7 +28,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y build-essential libsqlite3-dev zlib1g-dev
           git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe
           make -C /tmp/tippecanoe -j"$(nproc)" && sudo make -C /tmp/tippecanoe install
-      - run: pip install -r pipeline/requirements.txt
+      - run: uv sync
       - run: npm ci
       - name: Build data
         run: make

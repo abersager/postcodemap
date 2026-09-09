@@ -28,7 +28,7 @@ def iter_codepoint(path):
 
     tr = Transformer.from_crs("EPSG:27700", "EPSG:4326", always_xy=True)
     with zipfile.ZipFile(path) as z:
-        names = [n for n in z.namelist() if n.lower().endswith(".csv") and "/data/csv/" in n.lower()]
+        names = [n for n in z.namelist() if n.lower().endswith(".csv") and ("data/csv/" in n.lower())]
         if not names:
             sys.exit("No Data/CSV/*.csv files found in Code-Point Open zip")
         for name in sorted(names):
