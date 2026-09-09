@@ -1,0 +1,11 @@
+# Raw and generated data are never committed; regenerate with `make`.
+data/
+web/public/tiles/
+web/public/data/
+dist/
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.log
+.DS_Store

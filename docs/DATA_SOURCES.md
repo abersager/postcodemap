@@ -127,6 +127,17 @@ than depending on a third party's derived download that cannot be regenerated.
 
 To validate the pipeline where the OS endpoint was unreachable, it was run on
 `dwyl/uk-postcodes-latitude-longitude-complete-csv` (GitHub), an October 2017
-extract of the same unit centroids (1.77 M rows including NI). Results and
-timings are in `pipeline/README.md`. This snapshot is for testing only; the
-Makefile default is the live Code-Point Open download.
+extract of the same unit centroids (1.74 M rows, including Northern Ireland),
+with the grid-mask fallback because the ONS coastline service was also
+unreachable from the sandbox. Full run via `make all SOURCE=csv`:
+
+| Stage          | Result                                                   |
+|----------------|----------------------------------------------------------|
+| points         | 1,738,088 units kept; 20 unparseable, 135 out of range   |
+| polygons       | 10,819 sectors, 2,948 districts, 121 areas in 105 s      |
+| tiles          | boundaries.pmtiles 69 MB, units.pmtiles 70 MB            |
+| index          | 2,958 district files, 57 MB                              |
+
+The app was exercised headlessly at all four levels, plus search, hover and
+click-to-zoom. This snapshot is for testing only; the Makefile default is the
+live Code-Point Open download, and `pipeline/README.md` has the timings.

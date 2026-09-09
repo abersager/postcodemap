@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UK postcode map</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="map"></div>
+
+  <form id="search" autocomplete="off">
+    <input id="q" type="search" placeholder="Search a postcode or fragment: SW, EH12, SW1A 2, SW1A 2AA" spellcheck="false" />
+    <button type="submit" aria-label="Search">Go</button>
+    <ul id="suggestions" hidden></ul>
+    <div id="msg" hidden></div>
+  </form>
+
+  <div id="legend">
+    <div class="title">Level <span id="zoom"></span></div>
+    <div class="row" data-level="area"><span class="swatch"></span>Areas <small></small></div>
+    <div class="row" data-level="district"><span class="swatch"></span>Districts <small></small></div>
+    <div class="row" data-level="sector"><span class="swatch"></span>Sectors <small></small></div>
+    <div class="row" data-level="unit"><span class="swatch"></span>Units <small></small></div>
+    <div id="hover"></div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
