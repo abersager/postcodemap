@@ -89,7 +89,15 @@ absolute URLs.
 
 An optional GitHub Actions workflow,
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml), builds the data
-and deploys `dist/` to GitHub Pages. It runs on manual dispatch only.
+from the live sources and deploys `dist/` to GitHub Pages. It runs on manual
+dispatch only, so a refresh after a quarterly Royal Mail update is:
+
+```bash
+gh workflow run pages.yml          # needs Pages enabled with source "GitHub Actions"
+```
+
+The run takes about 15 minutes (tippecanoe is compiled from source on the
+runner). The live site is at https://abersager.github.io/postcodemap/.
 
 ## Repository layout
 
