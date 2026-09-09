@@ -95,13 +95,10 @@ Sizes to expect from a full GB build:
 | app bundle                    | < 1 MB  |
 
 Tiles are fetched in small ranges on demand, so visitors never download the
-whole archive. GitHub Pages' CDN, though, pulls a whole file on a cold range
-request and caches it for only ten minutes, so the first visitor at each
-edge location waits a few seconds; that is why the archives are kept small.
-For consistently fast loads, or if your host has a per-file size limit, host
-the two `.pmtiles` files on object storage with a long cache TTL (Cloudflare
-R2, S3 + CloudFront) and point `tiles.boundaries` / `tiles.units` in
-`web/config.js` at their absolute URLs.
+whole archive. If your host has a per-file size limit, or for the fastest
+loads (see "Performance" below), host the two `.pmtiles` files on object
+storage with a long cache TTL (Cloudflare R2, S3 + CloudFront) and point
+`tiles.boundaries` / `tiles.units` in `web/config.js` at their absolute URLs.
 
 An optional GitHub Actions workflow,
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml), builds the data
@@ -114,6 +111,27 @@ gh workflow run pages.yml          # needs Pages enabled with source "GitHub Act
 
 The run takes about 15 minutes (tippecanoe is compiled from source on the
 runner). The live site is at https://abersager.github.io/postcodemap/.
+
+## Performance
+
+Tiles are fetched with HTTP range requests against two PMTiles archives.
+Two things were found to make them slow, both outside the app:
+
+- **Idle connections silently dropped.** On the network this was developed
+  on, an HTTP connection to GitHub Pages that sits idle for about ten
+  seconds dies without being closed. Chrome only discovers that on the next
+  request and takes 10–18 s to reconnect, so the first tiles after any pause
+  stalled or timed out; a plain Python client showed the same. The app now
+  sends a 1-byte range request every 4 s while the page is visible
+  (`tileKeepAliveMs` in `web/config.js`), which keeps the connection alive
+  and removed the stalls. Connections to Cloudflare-hosted services over
+  HTTP/3 did not have the problem.
+- **Cold CDN cache.** GitHub Pages caches files for ten minutes; the first
+  range request after that may wait for the whole archive to be fetched, so
+  the archives are kept small (see the size table above).
+
+For consistently fast loads, host the two `.pmtiles` files on Cloudflare R2
+or similar and point `web/config.js` at them.
 
 ## Repository layout
 

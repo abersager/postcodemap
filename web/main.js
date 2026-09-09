@@ -136,7 +136,18 @@ map.on("load", () => {
   updateLegend();
   map.on("moveend", updateDensityShift);
   updateDensityShift();
+  startTileKeepAlive();
 });
+
+// Keep the tile host's connection warm (see CONFIG.tileKeepAliveMs).
+function startTileKeepAlive() {
+  if (!(CONFIG.tileKeepAliveMs > 0)) return;
+  const url = abs(CONFIG.tiles.boundaries);
+  setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    fetch(url, { headers: { Range: "bytes=0-0" }, cache: "no-store" }).then((r) => r.arrayBuffer()).catch(() => {});
+  }, CONFIG.tileKeepAliveMs);
+}
 
 // Re-derive every layer's zoom range from the thresholds and the density shift.
 function applyZoomRanges() {

@@ -27,6 +27,13 @@ export default {
     boundaries: "tiles/boundaries.pmtiles",
     units: "tiles/units.pmtiles",
   },
+  // Every N ms, while the page is visible, send a 1-byte range request to the
+  // tile host so the pooled HTTP connection never sits idle. Some networks
+  // (and GitHub Pages' CDN over HTTP/2) silently drop connections idle for
+  // ~10 s, and the browser then needs 10-18 s to notice, so the first tiles
+  // after any pause would stall. 0 disables. See README, "Performance".
+  tileKeepAliveMs: 4000,
+
   searchIndex: "data/index.json",
   unitIndexDir: "data/units/", // + "<DISTRICT>.json"
 
