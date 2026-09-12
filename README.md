@@ -8,6 +8,9 @@ range requests, no backend, no API keys.
 
 ## Coverage: Great Britain, not the UK
 
+For which other countries could be added from open data, and in what
+order, see [docs/WORLD_POSTCODES.md](docs/WORLD_POSTCODES.md).
+
 England, Scotland and Wales. Northern Ireland is not on the map because no
 open dataset of its postcode locations exists: Code-Point Open stops at the
 Irish Sea, and the ONS Postcode Directory carries BT postcodes only under a
@@ -117,15 +120,16 @@ runner). The live site is at https://abersager.github.io/postcodemap/.
 Tiles are fetched with HTTP range requests against two PMTiles archives.
 Two things were found to make them slow, both outside the app:
 
-- **Idle connections silently dropped.** On the network this was developed
-  on, an HTTP connection to GitHub Pages that sits idle for about ten
-  seconds dies without being closed. Chrome only discovers that on the next
-  request and takes 10–18 s to reconnect, so the first tiles after any pause
-  stalled or timed out; a plain Python client showed the same. The app now
-  sends a 1-byte range request every 4 s while the page is visible
-  (`tileKeepAliveMs` in `web/config.js`), which keeps the connection alive
-  and removed the stalls. Connections to Cloudflare-hosted services over
-  HTTP/3 did not have the problem.
+- **Idle connections silently dropped.** From the network this was developed
+  on, an HTTP connection to GitHub Pages that sits idle for 10–20 s dies
+  without being closed, and the client (Chrome or Python alike) needs 10–18 s
+  to notice and reconnect, so the first tiles after any pause stalled or
+  timed out. A control connection to another host on the same network was
+  unaffected, and the same test from a GitHub Actions runner never stalled,
+  so it is specific to that network path to Fastly's edge, not a general
+  property of either end. The app now sends a 1-byte range request every 4 s
+  while the page is visible (`tileKeepAliveMs` in `web/config.js`), which
+  keeps the connection alive and removed the stalls where they occur.
 - **Cold CDN cache.** GitHub Pages caches files for ten minutes; the first
   range request after that may wait for the whole archive to be fetched, so
   the archives are kept small (see the size table above).
