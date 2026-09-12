@@ -1,22 +1,34 @@
 #!/usr/bin/env python3
-"""Build the static search index consumed by the web app.
+"""Build a country's static search index and its meta.json for the app.
 
-  <out>/index.json           {"areas":{code:[minx,miny,maxx,maxy,units,km2]}, "districts":..., "sectors":...}
-  <out>/units/<DISTRICT>.json {"SW1A 2AA":[lon,lat], ...}   one file per district
+    python pipeline/build_index.py <cc> <polygons_dir> <units.csv> --out <dir>
+
+  <out>/meta.json      country description consumed by the app (levels, thresholds,
+                       bounds, attribution, point level, shard level)
+  <out>/index.json     {"<level id>": {code: [minx, miny, maxx, maxy, units, km2, name?]}, ...}
+  <out>/units/<SHARD>.json   {"<point code>": [lon, lat], ...} for countries with a
+                       point level, one file per SHARD_LEVEL code
 """
 import argparse
 import csv
 import json
 import os
+import sys
 from collections import defaultdict
 
+sys.path.insert(0, os.path.dirname(__file__))
+import countries  # noqa: E402
 
-def bboxes(path):
+
+def read_level(path):
     out = {}
     with open(path) as f:
         for line in f:
             p = json.loads(line)["properties"]
-            out[p["code"]] = [p["minx"], p["miny"], p["maxx"], p["maxy"], p["units"], p.get("km2", 0)]
+            row = [p["minx"], p["miny"], p["maxx"], p["maxy"], p["units"], p.get("km2", 0)]
+            if p.get("name"):
+                row.append(p["name"])
+            out[p["code"]] = row
     return out
 
 
@@ -27,38 +39,59 @@ def bbox_of(points):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("country")
+    ap.add_argument("polygons")
     ap.add_argument("units")
-    ap.add_argument("--polygons", required=True, help="directory with *_labels.geojsonl")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
-    os.makedirs(os.path.join(a.out, "units"), exist_ok=True)
+    mod = countries.get(a.country)
+    os.makedirs(a.out, exist_ok=True)
+    level_ids = [l["id"] for l in mod.LEVELS]
 
-    index = {lvl: bboxes(os.path.join(a.polygons, f"{lvl}.geojsonl")) for lvl in ("areas", "districts", "sectors")}
-    with open(os.path.join(a.out, "index.json"), "w") as f:
-        json.dump(index, f, separators=(",", ":"))
+    index = {l: read_level(os.path.join(a.polygons, f"{l}.geojsonl")) for l in level_ids}
+    bounds = [180, 90, -180, -90]
+    for row in index[level_ids[0]].values():
+        bounds = [min(bounds[0], row[0]), min(bounds[1], row[1]), max(bounds[2], row[2]), max(bounds[3], row[3])]
 
-    by_district = defaultdict(dict)
-    with open(a.units, newline="") as f:
-        for row in csv.DictReader(f):
-            by_district[row["district"]][row["postcode"]] = [round(float(row["lon"]), 5), round(float(row["lat"]), 5)]
     added = 0
-    for d, units in by_district.items():
-        with open(os.path.join(a.out, "units", f"{d}.json"), "w") as f:
-            json.dump(units, f, separators=(",", ":"))
-        # A district (or sector) can lack a polygon when all its units share
-        # coordinates with another district's units; keep it searchable.
-        if d not in index["districts"]:
-            index["districts"][d] = bbox_of(units.values())
-            added += 1
-        for s in {pc[: pc.index(" ") + 2] for pc in units}:
-            if s not in index["sectors"]:
-                index["sectors"][s] = bbox_of(v for pc, v in units.items() if pc.startswith(s))
+    if mod.POINT_LEVEL:
+        shard_dir = os.path.join(a.out, "units")
+        os.makedirs(shard_dir, exist_ok=True)
+        shards = defaultdict(dict)
+        by_level = {l: defaultdict(list) for l in level_ids}
+        with open(a.units, newline="") as f:
+            for row in csv.DictReader(f):
+                pt = [round(float(row["lon"]), 5), round(float(row["lat"]), 5)]
+                shards[row[mod.SHARD_LEVEL]][row["code"]] = pt
+                for l in level_ids:
+                    if row[l] not in index[l]:
+                        by_level[l][row[l]].append(pt)
+        for shard, units in shards.items():
+            with open(os.path.join(shard_dir, f"{shard}.json"), "w") as f:
+                json.dump(units, f, separators=(",", ":"))
+        # codes without a polygon (all their points shared with another code) stay searchable
+        for l in level_ids:
+            for code, pts in by_level[l].items():
+                index[l][code] = bbox_of(pts) + [len(pts), 0]
                 added += 1
-    if added:
-        with open(os.path.join(a.out, "index.json"), "w") as f:
-            json.dump(index, f, separators=(",", ":"))
-        print(f"build_index: {added} districts/sectors without polygons indexed from unit points")
-    print(f"build_index: {sum(len(v) for v in index.values())} polygons, {len(by_district)} district unit files")
+        print(f"build_index[{a.country}]: {len(shards)} point shards, {added} polygon-less codes indexed from points", file=sys.stderr)
+
+    with open(os.path.join(a.out, "index.json"), "w") as f:
+        json.dump(index, f, separators=(",", ":"), ensure_ascii=False)
+
+    meta = {
+        "code": mod.CODE, "name": mod.NAME,
+        "levels": [{"id": l["id"], "name": l["name"], "threshold": l["threshold"]} for l in mod.LEVELS],
+        "pointLevel": mod.POINT_LEVEL, "shardLevel": mod.SHARD_LEVEL,
+        "pointNoun": getattr(mod, "POINT_NOUN", (mod.POINT_LEVEL or {}).get("noun", "points")),
+        "bounds": [round(b, 4) for b in bounds],
+        "attribution": mod.ATTRIBUTION, "licence": mod.LICENCE,
+        "counts": {l: len(index[l]) for l in level_ids},
+        "hasPoints": bool(mod.POINT_LEVEL),
+    }
+    with open(os.path.join(a.out, "meta.json"), "w") as f:
+        json.dump(meta, f, indent=1, ensure_ascii=False)
+    print(f"build_index[{a.country}]: {sum(len(v) for v in index.values())} codes, bounds {meta['bounds']}", file=sys.stderr)
 
 
 if __name__ == "__main__":

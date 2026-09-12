@@ -1,7 +1,6 @@
 # Raw and generated data are never committed; regenerate with `make`.
 data/
-web/public/tiles/
-web/public/data/
+web/public/countries/
 dist/
 node_modules/
 .venv/

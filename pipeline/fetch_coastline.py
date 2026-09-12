@@ -35,24 +35,28 @@ def discover():
     return items[0]["url"].rstrip("/") + "/0"
 
 
+def fetch(out, url=None):
+    layer = url.rstrip("/") if url else discover()
+    params = {"where": "1=1", "outFields": "*", "outSR": "4326", "f": "geojson"}
+    q = layer + "/query?" + urllib.parse.urlencode(params)
+    print(f"fetch_coastline: GET {q}", file=sys.stderr)
+    gj = get_json(q)
+    if gj.get("type") != "FeatureCollection" or not gj.get("features"):
+        raise RuntimeError(f"unexpected response from {q}: {str(gj)[:200]}")
+    with open(out, "w") as f:
+        json.dump(gj, f)
+    print(f"fetch_coastline: {len(gj['features'])} features -> {out}", file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--url", help="FeatureServer layer URL (…/FeatureServer/0)")
     a = ap.parse_args()
     try:
-        layer = a.url.rstrip("/") if a.url else discover()
-        params = {"where": "1=1", "outFields": "*", "outSR": "4326", "f": "geojson"}
-        url = layer + "/query?" + urllib.parse.urlencode(params)
-        print(f"fetch_coastline: GET {url}", file=sys.stderr)
-        gj = get_json(url)
+        fetch(a.out, a.url)
     except Exception as e:  # network / policy / catalogue problems
         sys.exit(f"fetch_coastline: failed ({e}). Download the ONS 'Countries ... Boundaries UK BGC' GeoJSON manually to {a.out}, or pass --url.")
-    if gj.get("type") != "FeatureCollection" or not gj.get("features"):
-        sys.exit(f"Unexpected response from {url}: {str(gj)[:200]}")
-    with open(a.out, "w") as f:
-        json.dump(gj, f)
-    print(f"fetch_coastline: {len(gj['features'])} features -> {a.out}", file=sys.stderr)
 
 
 if __name__ == "__main__":

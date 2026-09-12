@@ -1,84 +1,88 @@
 # Data pipeline
 
-Reproducible build of every data file the app needs. Nothing generated is
-committed; `make` regenerates it all from the live sources.
+Reproducible build of every data file the app needs, one country at a time.
+Nothing generated is committed; `make COUNTRY=<cc>` regenerates it all from the
+live sources.
 
 ```
-Code-Point Open zip ─┐
-ONSPD zip (optional) ├─ build_points.py ──► data/build/units.csv
-any postcode CSV    ─┘                          │
-                                                ▼
-ONS coastline GeoJSON ──────────────── build_polygons.py ──► data/build/polygons/*.geojsonl
-(fetch_coastline.py, optional)                  │
-                                                ▼
-                                       build_tiles.sh ──► web/public/tiles/{boundaries,units}.pmtiles
-                                       build_index.py ──► web/public/data/index.json + units/<DISTRICT>.json
+pipeline/countries/<cc>.py ─ download() ──► data/<cc>/raw/
+                           ─ read_units() + parse()
+                                   │
+                    build_points.py ──► data/<cc>/build/units.csv
+                                   │
+  <cc>.mask() ──► build_polygons.py ──► data/<cc>/build/polygons/<level>.geojsonl (+ _lines, _labels)
+                                   │
+                    build_tiles.py ──► web/public/countries/<cc>/boundaries.pmtiles (+ points.pmtiles)
+                    build_index.py ──► web/public/countries/<cc>/index.json, units/<shard>.json, meta.json
 ```
+
+## Country modules
+
+Each country is a module in `pipeline/countries/` implementing the interface
+documented in `countries/__init__.py`: its levels (coarse to fine) with default
+zoom thresholds, an optional point level, attribution, `download()`,
+`read_units()` (one point per unit postcode or address, with its finest code),
+`parse()` (splits a code into the levels) and optionally `names()` and `mask()`
+(land polygons for clipping). The generic scripts never contain country logic.
+
+| Country | Module | Points | Levels | Mask |
+|---|---|---|---|---|
+| Great Britain | `gb.py` | OS Code-Point Open unit postcodes (1.7 M); ONSPD or a CSV via `SOURCE=` | area, district, sector + unit points | ONS country boundaries (BGC) |
+| Austria | `at.py` | BEV Adressregister addresses (2.5 M), each with its PLZ | zone (1 digit), region (2 digits), PLZ | Statistik Austria municipalities |
 
 ## Tools
 
 - [uv](https://docs.astral.sh/uv/) (`brew install uv`). Dependencies (numpy,
-  scipy, shapely ≥ 2.0, pyproj) are declared in `pyproject.toml` and pinned in
-  `uv.lock`; the Makefile runs every script through `uv run python`, which
-  creates `.venv/` and installs them on first use. Add a dependency with
-  `uv add <package>`. To use another interpreter, override `PYTHON`, e.g.
-  `make PYTHON="poetry run python"`.
+  scipy, shapely ≥ 2.0, pyproj, pyshp) are declared in `pyproject.toml` and
+  pinned in `uv.lock`; the Makefile runs every script through `uv run python`.
+  Override the interpreter with `make PYTHON="poetry run python"`.
 - [tippecanoe](https://github.com/felt/tippecanoe) ≥ 2.17 (writes `.pmtiles`
-  directly; 2.78 was used here). macOS: `brew install tippecanoe`. Linux:
+  directly). macOS: `brew install tippecanoe`. Linux:
 
   ```bash
   git clone --depth 1 https://github.com/felt/tippecanoe.git
   cd tippecanoe && make -j4 && sudo make install     # needs g++, make, libsqlite3-dev, zlib1g-dev
   ```
-- `curl`, `make`.
 
 ## Targets
 
-| Command                          | What it does                                                        |
-|----------------------------------|---------------------------------------------------------------------|
-| `make`                           | download → points → polygons → tiles → index, for all of GB         |
-| `make sample SAMPLE_AREAS=SW,EH` | same, but only the listed areas (seconds instead of minutes)        |
-| `make polygons` / `make tiles`   | run a single stage (make tracks what is stale)                      |
-| `make clean`                     | delete generated data, keep downloads                               |
-| `make distclean`                 | delete downloads too                                                |
+| Command | What it does |
+|---|---|
+| `make` / `make COUNTRY=gb` | download → points → polygons → tiles → index for Great Britain |
+| `make COUNTRY=at` | the same for Austria (any module in `pipeline/countries/`) |
+| `make sample COUNTRY=gb SAMPLE_AREAS=SW,EH` | only the listed top-level codes (seconds instead of minutes) |
+| `make polygons COUNTRY=at` | run a single stage (make tracks what is stale) |
+| `make clean COUNTRY=at` | delete that country's generated data, keep downloads |
+| `make distclean COUNTRY=at` | delete its downloads too |
 
-Variables (set on the command line):
-
-| Variable        | Default                                   | Notes                                                    |
-|-----------------|-------------------------------------------|----------------------------------------------------------|
-| `PYTHON`        | `uv run python`                           | interpreter used for every pipeline script               |
-| `SOURCE`        | `codepoint`                               | `codepoint`, `onspd` or `csv`                            |
-| `CODEPOINT_URL` | OS Downloads API CSV URL                  | no key needed                                            |
-| `ONSPD_ZIP`     | `data/raw/onspd.zip`                      | download manually from the ONS Open Geography Portal     |
-| `INCLUDE_NI`    | `0`                                       | `1` keeps BT postcodes from ONSPD (see licence caveat)   |
-| `CSV_FILE`      |                                           | any `postcode,lat,lon` CSV or zip when `SOURCE=csv`      |
-| `COASTLINE`     | `data/raw/coastline.geojson`              | clip mask; auto-fetched from ONS if missing              |
-| `COASTLINE_URL` |                                           | explicit ArcGIS FeatureServer layer URL, e.g. a BFC layer|
+GB-only variables: `SOURCE=codepoint|onspd|csv` (default codepoint),
+`ONSPD_ZIP`, `CSV_FILE`, `INCLUDE_NI=1` (keeps Northern Ireland from ONSPD;
+separate licence, see docs/CAVEATS.md), `COASTLINE_URL`.
 
 ## Stages
 
 ### 1. `build_points.py`
 
-Reads the source, normalises each postcode to `OUTWARD INWARD`, drops rows
-without coordinates (Code-Point Open positional quality 90; ONSPD lat 99.99),
-drops terminated postcodes (ONSPD `doterm`), dedupes, derives the area,
-district and sector codes and writes `units.csv` in WGS84. Code-Point Open
-eastings/northings are transformed from EPSG:27700 with pyproj.
+Calls the country module's `read_units()` and `parse()`, drops unparseable
+codes, dedupes unit postcodes (addresses are not deduped) and writes
+`units.csv`: `code,<one column per polygon level>,lon,lat` in WGS84.
 
 ### 2. `build_polygons.py`
 
-1. Projects every unit to EPSG:27700 and computes the Voronoi diagram of all
-   distinct locations (scipy/Qhull; 1.7 M points take ~40 s). Sixteen sentinel
-   points far outside the UK keep every real cell finite.
-2. Where several units share one location, the sector with most units there
-   owns the cell. Sectors whose units *all* coincide with another sector's
+1. Projects every point to a local transverse Mercator centred on the data and
+   computes the Voronoi diagram of all distinct locations (scipy/Qhull; 1.7 M
+   points take ~40 s). Sixteen sentinel points far outside keep every real
+   cell finite.
+2. Where several points share one location, the finest-level code with most
+   points there owns the cell. Sectors whose units *all* coincide with another sector's
    (PO-box and large-user sectors such as BS99 or EC3P, 232 in the 2017 test
    data, fewer with Code-Point Open which drops them upstream) get no polygon; they
    are listed in `report.json` and remain searchable through the unit index.
-3. Cells are dissolved to sectors, sectors to districts, districts to areas
-   with GEOS coverage unions (exact shared edges, so no slivers).
+3. Cells are dissolved into the finest level, then each level into the next
+   coarser one, with GEOS coverage unions (exact shared edges, so no slivers).
 4. Every level is clipped to the land mask, cut into 25 km pieces for speed.
-   The mask is the ONS country boundaries when available; otherwise a 1 km
+   The mask is whatever the country module provides (ONS country boundaries
+   for GB, the union of municipalities for AT); otherwise a 1 km
    occupancy grid of the points dilated by 2 km (visibly blocky at the
    coast, flagged as `"mask": "grid"` in `report.json`). Unit locations that
    fall outside the mask get a 250 m buffer added so nothing disappears.
@@ -99,9 +103,10 @@ eastings/northings are transformed from EPSG:27700 with pyproj.
    `minx/miny/maxx/maxy` (WGS84 bbox, used for click-to-zoom and search),
    `parent`, `area`, `district`.
 
-### 3. `build_tiles.sh`
+### 3. `build_tiles.py`
 
-One tippecanoe run per layer, then `tile-join` into two archives:
+One tippecanoe run per layer, then `tile-join` into `boundaries.pmtiles` and,
+for countries with a point level, `points.pmtiles`:
 
 - `boundaries.pmtiles`: `areas` (z0–10), `districts` (z6–12), `sectors`
   (z9–12) polygons, the matching `*_lines` boundary layers and `*_labels`

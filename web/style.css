@@ -11,6 +11,7 @@ html, body { margin: 0; height: 100%; font: 14px/1.4 system-ui, -apple-system, "
 #suggestions li { padding: 6px 12px; cursor: pointer; display: flex; justify-content: space-between; }
 #suggestions li:hover, #suggestions li.active { background: #eef3f8; }
 #suggestions li small { color: #6b7684; }
+#suggestions li .name { color: #6b7684; margin-left: 6px; font-size: 12px; }
 #msg { margin-top: 6px; padding: 6px 10px; background: #fff3cd; border: 1px solid #ffe08a; border-radius: 6px; font-size: 13px; }
 
 #legend { position: absolute; left: 12px; bottom: 52px; z-index: 2; background: rgba(255,255,255,.94); border-radius: 6px;
@@ -18,7 +19,7 @@ html, body { margin: 0; height: 100%; font: 14px/1.4 system-ui, -apple-system, "
   max-height: calc(100vh - 140px); overflow: auto; box-sizing: border-box; }
 #legend .title { font-weight: 600; margin-bottom: 6px; }
 #legend .title span { font-weight: 400; color: #6b7684; font-size: 12px; }
-#legend .row { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 4px; color: #6b7684; }
+#legend .row { cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 4px; color: #6b7684; }
 #legend .row small { margin-left: auto; font-size: 11px; }
 #legend .row.active { background: #eef3f8; color: #1f2933; font-weight: 600; }
 #legend .swatch { width: 14px; height: 14px; border-radius: 3px; border: 2px solid currentColor; box-sizing: border-box; }

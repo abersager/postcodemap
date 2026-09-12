@@ -1,6 +1,7 @@
-# Builds the data from the live open sources and deploys the static site to
-# GitHub Pages. Manual trigger only (it downloads ~30 MB, computes for ~10 min
-# and publishes ~200 MB). Enable Pages with source "GitHub Actions" first.
+# Builds every country's data from the live open sources and deploys the
+# static site to GitHub Pages. Manual trigger only (it downloads ~130 MB,
+# computes for ~15 min and publishes ~150 MB). Enable Pages with source
+# "GitHub Actions" first.
 name: Build and deploy to GitHub Pages
 on:
   workflow_dispatch:
@@ -30,8 +31,10 @@ jobs:
           make -C /tmp/tippecanoe -j"$(nproc)" && sudo make -C /tmp/tippecanoe install
       - run: uv sync
       - run: npm ci
-      - name: Build data
-        run: make
+      - name: Build data (one make per country)
+        run: |
+          make COUNTRY=gb
+          make COUNTRY=at
       - name: Build site
         run: npm run build
       - uses: actions/upload-pages-artifact@v3

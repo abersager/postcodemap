@@ -4,7 +4,9 @@
 
 | Layer     | Status        | Detail                                                                                   |
 |-----------|---------------|------------------------------------------------------------------------------------------|
-| Units     | **Official**  | Centroids from OS Code-Point Open (Royal Mail PAF + OS positioning). A point marks the mean position of the delivery points in a postcode, snapped to the nearest address; it is not a boundary. Royal Mail publishes no unit boundaries. |
+| Units (GB) | **Official**  | Centroids from OS Code-Point Open (Royal Mail PAF + OS positioning). A point marks the mean position of the delivery points in a postcode, snapped to the nearest address; it is not a boundary. Royal Mail publishes no unit boundaries. |
+| Addresses (AT) | **Official** | BEV Adressregister, every address geocoded to 1 m with its PLZ. Not shown as points; used only to derive the PLZ polygons. |
+| PLZ, regions, zones (AT) | **Derived** | Voronoi cells of 2.5 M addresses dissolved by PLZ, then by 2-digit and 1-digit prefix, clipped to the union of Statistik Austria's municipalities. Austrian Post publishes no PLZ polygons. |
 | Sectors   | **Derived**   | Union of the Voronoi cells of the sector's unit centroids, clipped to the coastline.      |
 | Districts | **Derived**   | Union of derived sectors.                                                                |
 | Areas     | **Derived**   | Union of derived districts.                                                              |
@@ -56,6 +58,10 @@ What "derived" means in practice:
   contributors (ODbL) and the style © OpenMapTiles. MapLibre adds their
   attribution from the style. If you switch to OS Open Zoomstack via the OS
   Data Hub, an API key and the OS attribution line are required.
+- **BEV Adressregister** (Austria): free use on condition that every release
+  quotes *© Österreichisches Adressregister, data of the record date
+  01.04.2026*. **RTR postcode list**: CC BY 4.0. **Statistik Austria
+  municipalities**: CC BY 4.0, *Datenquelle: Statistik Austria*.
 - **This repository's code**: see LICENSE (MIT).
 
 ## Currency and refresh

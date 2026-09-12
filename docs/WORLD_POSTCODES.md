@@ -26,7 +26,7 @@ because the licences differ and must not be mixed.
 | Norway | 4 digits | 1, 2, 4 digits | Kartverket "Postnummerområder" polygons (boundaries from Posten) | Verified: CC BY 4.0 |
 | Finland | 5 digits | 2, 3, 5 digits | Statistics Finland Paavo postal-code area polygons | Verified: Statistics Finland open data terms (CC BY 4.0) |
 | Switzerland + Liechtenstein | 4 digits | 1, 2, 4 digits (+PLZ6) | swisstopo "Amtliches Ortschaftenverzeichnis mit PLZ und Perimeter" polygons | Verified: Swiss OGD, free |
-| Austria | 4 digits | 1, 2, 4 digits | data.gv.at PLZ polygons (shapefile) | Verified: CC BY 3.0 AT |
+| Austria | 4 digits | 1, 2, 4 digits | **Built.** BEV Adressregister (2.5 M geocoded addresses with PLZ, twice yearly); RTR postcode list for names; Statistik Austria municipalities as mask. No official PLZ polygons exist (the data.gv.at "Postleitzahlen" entry is RTR's CSV list) | Verified: BEV licence (attribution required), RTR CC BY 4.0, Statistik Austria CC BY 4.0 |
 | Spain | 5 digits | 2 (province), 3, 5 digits | IGN CartoCiudad "Códigos postales" polygons (WFS/download) | Verified: CC BY 4.0 |
 | Belgium | 4 digits | 1, 2, 4 digits | bpost postcode polygons via data.gov.be / regional portals | Reported open (bpost); confirm terms per file |
 | France | 5 digits | 2 (département), 5 digits | BAN address points with code postal (25 M addresses); La Poste postcode base | Verified: Licence Ouverte 2.0 (BAN also as ODbL via OSM-FR; use the LO build) |
