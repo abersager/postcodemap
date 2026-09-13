@@ -59,9 +59,16 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           python3 scripts/r2_upload.py dist/countries "$BUCKET" "v/${{ steps.v.outputs.ver }}/countries"
-          rm -rf dist/countries   # not part of the Pages upload
+      - name: Warm the edge cache for the new archives
+        run: |
+          base="https://data.$DOMAIN/v/${{ steps.v.outputs.ver }}/countries"
+          for f in $(cd dist && find countries -name '*.pmtiles' -o -name 'units.bin' -o -name '*.json' | sed 's|^countries/||'); do
+            curl -sS -o /dev/null -r 0-16383 -w "$f %{http_code} %{time_total}s\n" "$base/$f"
+          done
       - name: Deploy app to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler pages deploy dist --project-name "$PAGES_PROJECT" --branch "${{ github.ref_name }}" --commit-dirty=true
+        run: |
+          rm -rf dist/countries   # served from R2, not part of the Pages upload
+          npx wrangler pages deploy dist --project-name "$PAGES_PROJECT" --branch "${{ github.ref_name }}" --commit-dirty=true
