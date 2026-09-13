@@ -56,7 +56,7 @@ tiles: $(POLYS)/.done pipeline/build_tiles.py
 	$(PYTHON) pipeline/build_tiles.py $(COUNTRY) $(POLYS) $(UNITS) --out $(OUT) --tmp $(BUILD)/tiles
 
 index: $(POLYS)/.done pipeline/build_index.py
-	rm -rf $(OUT)/index.json $(OUT)/units
+	rm -rf $(OUT)/index.json $(OUT)/units $(OUT)/units.bin
 	$(PYTHON) pipeline/build_index.py $(COUNTRY) $(POLYS) $(UNITS) --out $(OUT)
 
 clean:

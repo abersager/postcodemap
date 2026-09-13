@@ -121,9 +121,12 @@ size directly sets how long the first visitor waits.
 
 ### 4. `build_index.py`
 
-Static search index: `index.json` maps every area, district and sector code
-to `[minx, miny, maxx, maxy, units, km2]` (the app also uses units/km2 to
-adapt the zoom thresholds to postcode density); `units/<DISTRICT>.json` maps each unit in that district to
+Static search index: `index.json` maps every polygon code to
+`[minx, miny, maxx, maxy, units, km2, name?]` (the app also uses units/km2 to
+adapt the zoom thresholds to postcode density); for countries with a point
+level, `units.bin` holds one gzipped JSON of `{code: [lon, lat]}` per
+`SHARD_LEVEL` code, concatenated, with `index.json["shards"]` giving each
+slice's byte offset and length, so a unit search is one range request; `units/<DISTRICT>.json` maps each unit in that district to
 `[lon, lat]`. The app loads a district file on demand when a unit-level
 search is made.
 

@@ -250,10 +250,23 @@ const msg = document.getElementById("msg");
 const indexReady = Promise.all(COUNTRIES.map((c) => fetch(c.base + "index.json").then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
   .then((j) => { c.index = j; if (c === active && map.loaded()) updateDensityShift(); }).catch((e) => console.warn(`${c.cc}: search index unavailable:`, e))));
 
+// Point lists live in one file per country (units.bin): gzipped JSON slices
+// addressed by index.json["shards"], fetched with a range request.
 const shardCache = new Map();
 async function unitsOf(c, shard) {
   const key = `${c.cc}/${shard}`;
-  if (!shardCache.has(key)) shardCache.set(key, fetch(c.base + `units/${encodeURIComponent(shard)}.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})));
+  if (!shardCache.has(key)) shardCache.set(key, (async () => {
+    const loc = c.index?.shards?.[shard];
+    if (!loc) return {};
+    try {
+      const r = await fetch(c.base + "units.bin", { headers: { Range: `bytes=${loc[0]}-${loc[0] + loc[1] - 1}` } });
+      if (r.status !== 206 && r.status !== 200) return {};
+      let buf = await r.arrayBuffer();
+      if (r.status === 200) buf = buf.slice(loc[0], loc[0] + loc[1]); // server ignored the range
+      const text = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+      return JSON.parse(text);
+    } catch (e) { console.warn("units shard", key, e); return {}; }
+  })());
   return shardCache.get(key);
 }
 const bboxOfPoints = (pts) => pts.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]);
