@@ -1,179 +1,194 @@
 # Postcode map
 
-An interactive map of postcodes, currently Great Britain, Austria and the Netherlands, that
-reveals more detail as you zoom in:
-postcode **areas** (SW, EH) → **districts** (SW1A, EH12) → **sectors**
-(SW1A 2) → **unit** postcodes (SW1A 2AA). Layers swap automatically by zoom
-level. It is a fully static site: MapLibre GL JS reading PMTiles over HTTP
-range requests, no backend, no API keys.
+An interactive map of postcode boundaries, live at
+**https://postcodemap.net**. It covers Great Britain, Austria and the
+Netherlands and shows more detail as you zoom in, from 1- or 2-character
+regions down to individual postcodes:
 
-## Coverage
+| Country | Levels, coarse to fine | Source of the geometry |
+|---|---|---|
+| Great Britain | area (`SW`) → district (`SW1A`) → sector (`SW1A 2`) → unit (`SW1A 2AA`, drawn as points) | polygons derived from OS Code-Point Open unit centroids |
+| Austria | zone (`1`) → region (`10`) → PLZ (`1010`) | polygons derived from the BEV address register (2.5 M geocoded addresses) |
+| Netherlands | region (`10`) → PC4 (`1012`) → PC5 (`1012A`) → PC6 (`1012AB`) | official PC6 polygons from Statistics Netherlands (CBS), dissolved upwards |
 
-Great Britain (England, Scotland and Wales), Austria and the Netherlands. Each country is a
-module in `pipeline/countries/` with its own source, licence and level
-structure, and the app loads every built country at once; the legend follows
-the country under the map centre. Which other countries could be added from
-open data, and in what order, is in
-[docs/WORLD_POSTCODES.md](docs/WORLD_POSTCODES.md); the GitHub issues track
-them.
+The site is fully static: [MapLibre GL JS](https://maplibre.org/) reads
+[PMTiles](https://docs.protomaps.com/pmtiles/) archives with HTTP range
+requests. There is no backend and no API key. Everything on the map is built
+from open data by the pipeline in this repository; nothing generated is
+committed.
 
-Northern Ireland is not on the map because no
-open dataset of its postcode locations exists: Code-Point Open stops at the
-Irish Sea, and the ONS Postcode Directory carries BT postcodes only under a
-Northern Ireland End User Licence that forbids public redistribution, which
-a published map is. The one open alternative (postcodes harvested from Food
-Hygiene Rating Scheme business records) covers only postcodes that contain a
-food business, with the business's coordinates rather than the postcode's,
-so it was not used. Isle of Man and the Channel Islands have their own
-postcode systems outside Code-Point Open. See
-[docs/CAVEATS.md](docs/CAVEATS.md).
+## What the boundaries mean
 
-Everything is built from open data. For GB and Austria **only the points
-are official** (OS Code-Point Open unit postcodes; BEV address register
-addresses) and every polygon is **derived** by this repo's pipeline (Voronoi
-cells of the points, dissolved up the code hierarchy and clipped to the
-country's boundary) because no official open polygons exist. The
-Netherlands uses **official PC6 polygons** from Statistics Netherlands (CBS),
-dissolved into PC5, PC4 and 2-digit regions. See
-[docs/CAVEATS.md](docs/CAVEATS.md) before relying on a boundary and
-[docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for the source investigation.
+Only the Netherlands publishes postcode polygons as open data. For Great
+Britain and Austria the open data consists of **points** (one per unit
+postcode, or one per address) and the pipeline **derives** polygons from
+them: it computes the Voronoi cell of every point, dissolves the cells up
+the code hierarchy and clips the result to the country's coastline or
+municipal boundary. A derived boundary runs halfway between neighbouring
+postcodes' points, which is a good approximation in built-up areas and a
+rough one in the countryside. Only the boundaries *between* postcodes are
+drawn; the coast comes from the basemap.
 
-## Quick start
+Northern Ireland is missing because its postcode locations are not open
+data (Code-Point Open stops at the Irish Sea and the ONS Postcode Directory
+licenses BT postcodes under terms that forbid redistribution). The Isle of
+Man and the Channel Islands have their own postcode systems outside
+Code-Point Open.
 
-Requirements: [uv](https://docs.astral.sh/uv/) (manages Python and the
-pipeline's dependencies), Node 18+, `tippecanoe` (≥ 2.17, for PMTiles
-output), `curl`. On macOS: `brew install uv tippecanoe`; on Linux build
-tippecanoe from source (see [pipeline/README.md](pipeline/README.md)).
+Read [docs/CAVEATS.md](docs/CAVEATS.md) before relying on a boundary.
+[docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) records how the sources were
+chosen; [docs/WORLD_POSTCODES.md](docs/WORLD_POSTCODES.md) surveys which
+other countries publish open postcode data, and the GitHub issues track
+adding them.
+
+## Running it locally
+
+Requirements: [uv](https://docs.astral.sh/uv/) (installs Python and the
+pipeline's dependencies), Node 18+, [tippecanoe](https://github.com/felt/tippecanoe)
+2.17 or newer (`brew install uv tippecanoe` on macOS; build tippecanoe from
+source on Linux) and `curl`.
 
 ```bash
 npm install
-make            # Great Britain: downloads Code-Point Open + ONS coastline, builds tiles + index (~10 min)
-make COUNTRY=at # Austria: BEV address register (100 MB download), ~5 min
-make COUNTRY=nl # Netherlands: CBS PC6 polygons (190 MB download), ~5 min
+make            # Great Britain: downloads Code-Point Open and the ONS coastline, ~10 min
+make COUNTRY=at # Austria: BEV address register, 100 MB download, ~5 min
+make COUNTRY=nl # Netherlands: CBS PC6 polygons, 190 MB download, ~5 min
 npm run dev     # http://localhost:5173
 ```
 
-For a fast development loop build a few areas only:
+Each `make` writes `web/public/countries/<cc>/` (tiles, search index,
+`meta.json`); the app loads every country listed in `web/config.js`. For
+a quick build of a few top-level codes only:
 
 ```bash
-make sample SAMPLE_AREAS=SW,W,WC,EC
+make sample COUNTRY=gb SAMPLE_AREAS=SW,W,WC,EC   # central London in about a minute
+make sample COUNTRY=nl SAMPLE_AREAS=10,11         # Amsterdam
 ```
+
+The pipeline stages, timings and how to add a country are described in
+[pipeline/README.md](pipeline/README.md).
 
 ## Using the map
 
-- Zoom to change level. The legend (bottom left) shows the active level and
-  the zoom band of each; click a legend row to jump to that level.
-- Only boundaries between postcodes are drawn; the coast comes from the
-  basemap.
-- Hover a polygon or point to highlight it and see its code and unit count.
-- Click a polygon to zoom into it at the next level. Click a unit for a popup.
-- Search any fragment: `SW`, `EH12`, `SW1A 2`, `SW1A 2AA`, or a partial unit
-  like `SW1A 2A`. Suggestions appear as you type. The searched polygon is
-  outlined until the next search.
-- The URL hash stores the view, so links are shareable.
+- Zoom to change level. The legend (bottom left) names the country under
+  the map centre, the active level and each level's zoom band; click a
+  legend row to jump to that level.
+- Hover a polygon to see its code, place name and how many postcodes it
+  contains. Click a polygon to zoom into it at the next level; click a GB
+  unit point for its coordinates.
+- Search any fragment of a code: `SW`, `EH12`, `SW1A 2`, `SW1A 2AA`,
+  `1010`, `1012AB`, or a partial code like `SW1A 2A`. Suggestions appear as
+  you type; the matched polygon stays outlined until the next search. The
+  country under the map centre is searched first.
+- The view is stored in the URL hash, so links can be shared.
 
 ## Configuration
 
-Everything tunable is in [`web/config.js`](web/config.js):
+All tunables are in [`web/config.js`](web/config.js):
 
 ```js
-countries: ["gb", "at"]
-thresholds: { gb: { district: 8, sector: 11, unit: 13 } }   // per-country overrides of meta.json defaults
-density: { enabled: true, baseUnitsPerKm2: 40, maxShift: 2 }
+countries: ["gb", "at", "nl"],   // countries to load (each needs a build in web/public/countries/)
+thresholds: { gb: { district: 8, sector: 11, unit: 13 } },   // per-country overrides of the zoom at which each level appears
+density: { enabled: true, baseUnitsPerKm2: 40, maxShift: 2 },
 ```
 
-The thresholds shift upwards in dense places (by log10 of the local
-postcode density over `baseUnitsPerKm2`, up to `maxShift`), so central London
-switches to sectors and units two zoom levels later than the countryside.
-The legend shows the density under the map centre and the shift applied.
+Postcodes are far denser in city centres than in the countryside, so fixed
+zoom thresholds cannot suit both. The app therefore shifts the active
+country's thresholds upwards by log10 of the local postcode density over
+`baseUnitsPerKm2`, capped at `maxShift`: central London or Amsterdam switch
+to the finer levels about two zoom levels later than a rural area. The
+legend shows the density under the map centre and the shift in effect.
 
-Also there: basemap style URL, colours by level depth, label sizes and the
-keep-alive interval. Each country's default thresholds and attribution live
-in its module and reach the app through `countries/<cc>/meta.json`.
+The same file holds the basemap style URL (OpenFreeMap by default, no key
+needed), the colours and label sizes per level, and `tileKeepAliveMs` (see
+Hosting below). Each country's default thresholds, attribution and level
+names come from its pipeline module via `countries/<cc>/meta.json`.
 
-## Deployment
+## Deployment and hosting
 
-The site is static: `npm run build` writes `dist/` with relative paths.
+`npm run build` writes a static `dist/` with relative paths that can be
+served from any web server or object store that supports HTTP range
+requests.
 
-**Production: Cloudflare (free).** https://postcodemap.net is a Cloudflare
-Pages project; the data lives in an R2 bucket behind the custom domain
-`data.postcodemap.net`, so tiles are served from Cloudflare's cache with free
-egress. `.github/workflows/cloudflare.yml` (manual dispatch) builds every
-country, uploads `dist/countries` to R2 under `v/<date>-<sha>/` with
-immutable cache headers, and deploys the app with `countryBase` pointing at
-that prefix; versioned prefixes mean no cache purges and no broken clients
-mid-deploy. `scripts/cloudflare_setup.py` created the bucket, its CORS (GET
-and Range from any origin), the custom domain, a cache-everything rule with
-a one-year edge TTL (needed because `.pmtiles` is not a cacheable extension
-by default), the Pages project and the apex DNS record; it is idempotent and
-runs when the workflow's `setup` input is on. Secrets: `CLOUDFLARE_API_TOKEN`
-(permissions listed in the script) and `CLOUDFLARE_ACCOUNT_ID`.
+**postcodemap.net** runs on Cloudflare's free tier. The app is a Cloudflare
+Pages project; the data archives live in an R2 bucket behind the custom
+domain `data.postcodemap.net` and are served from Cloudflare's cache with
+free egress. `.github/workflows/cloudflare.yml` (run manually from the
+Actions tab) builds every country, uploads `dist/countries` to R2 under a
+versioned prefix `v/<date>-<sha>/` with immutable cache headers, deploys the
+app with `VITE_COUNTRY_BASE` pointing at that prefix, and pre-warms the
+cache. Versioned prefixes mean a deploy never needs a cache purge and never
+breaks a client that is still using the previous version.
 
-Sizes to expect from a full build:
+`scripts/cloudflare_setup.py` creates everything the workflow needs (bucket,
+CORS for range requests, the custom domain, a cache-everything rule with a
+one-year edge TTL because `.pmtiles` is not cached by default, Smart Tiered
+Cache, the Pages project and the apex DNS record). It is idempotent and runs
+when the workflow's `setup` input is ticked. The workflow needs two
+repository secrets, `CLOUDFLARE_API_TOKEN` (permissions are listed at the
+top of the script) and `CLOUDFLARE_ACCOUNT_ID`.
 
-| File                                   | Size    |
-|----------------------------------------|---------|
-| `countries/gb/boundaries.pmtiles`      | ~30 MB  |
-| `countries/gb/points.pmtiles`          | ~22 MB  |
-| `countries/gb/index.json` + `units.bin`| ~15 MB (search index; unit lists as gzipped slices fetched by range) |
-| `countries/at/boundaries.pmtiles`      | ~7 MB   |
-| `countries/nl/boundaries.pmtiles`      | ~77 MB (466 k official PC6 polygons at z12, PC5 z9–12) |
-| `countries/nl/index.json` + `units.bin`| ~7 MB (PC5/PC6 codes as gzipped slices fetched by range) |
-| app bundle                             | < 1 MB  |
+The GitHub Pages site of this repository only redirects to postcodemap.net,
+keeping the map view in the URL hash (`.github/workflows/pages.yml` publishes
+the two files in `redirect/`).
 
-Well inside R2's free tier (10 GB, 10 M reads a month counted only on cache
-misses). Cloudflare Pages itself caps files at 25 MiB, which is why the
-archives live in R2 and not with the app.
+Sizes of a full build:
 
-**GitHub Pages** (https://abersager.github.io/postcodemap/) now only
-redirects to postcodemap.net, keeping the map view in the URL hash;
-`.github/workflows/pages.yml` publishes the two files in `redirect/`. The
-site can still be hosted entirely on GitHub Pages by deploying `dist/` there,
-with the performance caveats below.
+| File | Size |
+|---|---|
+| `countries/gb/boundaries.pmtiles` | ~30 MB |
+| `countries/gb/points.pmtiles` | ~22 MB |
+| `countries/gb/index.json` + `units.bin` | ~15 MB (search index; unit lists as gzipped slices fetched by range) |
+| `countries/at/boundaries.pmtiles` | ~7 MB |
+| `countries/nl/boundaries.pmtiles` | ~77 MB (466 k official PC6 polygons at z12, PC5 at z9–12) |
+| `countries/nl/index.json` + `units.bin` | ~7 MB (PC5/PC6 codes as gzipped slices fetched by range) |
+| app bundle | < 1 MB |
 
-## Performance
+This is well inside R2's free tier (10 GB stored, 10 M reads a month, reads
+counted only on cache misses). Cloudflare Pages caps individual files at
+25 MiB, which is why the archives are in R2 rather than deployed with the
+app.
 
-Tiles are fetched with HTTP range requests against PMTiles archives. On the
-production host (R2 behind Cloudflare's cache) a cold 300 KB range takes
-about 0.12 s from London and subsequent ones are edge cache hits; a
-connection left idle for 20 s answers in 0.03 s. Two problems were found on
-GitHub Pages and are documented so nobody rediscovers them:
-
-- **Idle connections silently dropped.** From the network this was developed
-  on, an HTTP connection to GitHub Pages that sits idle for 10–20 s dies
-  without being closed, and the client needs 10–18 s to notice and
-  reconnect. A control connection to another host on the same network was
-  unaffected, the same test from a GitHub Actions runner never stalled, and
-  the Cloudflare host never stalls, so it is specific to that network path
-  to Fastly's edge. `tileKeepAliveMs` in `web/config.js` (default 0) sends a
-  1-byte range request every N ms to keep the connection warm; set it to
-  4000 when serving from GitHub Pages.
-- **Cold CDN cache.** GitHub Pages caches files for ten minutes; the first
-  range request after that may wait for the whole archive to be fetched.
-  Cloudflare caches the archives for a year, keyed by the versioned prefix.
+**Hosting elsewhere.** A PMTiles host must honour range requests and should
+cache the archives for a long time: a CDN that caches for minutes will
+repeatedly fetch whole 30–80 MB files to answer the first range request
+after expiry. GitHub Pages works but has that ten-minute cache, and on some
+network paths its edge silently drops idle connections, which shows up as
+tile requests stalling for 10–18 s. `tileKeepAliveMs` in `web/config.js`
+sends a one-byte range request every N milliseconds to keep the connection
+warm; it is off (0) for Cloudflare and should be about 4000 on GitHub Pages.
 
 ## Repository layout
 
 ```
-Makefile              orchestrates the pipeline (make, make sample, make clean)
+Makefile              runs the pipeline for one country (make, make sample, make clean)
 pyproject.toml        Python dependencies for the pipeline (uv.lock pins them)
-pipeline/             country modules, derive polygons, tile, index  (see pipeline/README.md)
+pipeline/             country modules and the four stages: points, polygons, tiles, index
 web/                  the app: index.html, main.js, config.js, style.css
 web/public/countries/ generated tiles, search index and meta.json per country (gitignored)
 data/<cc>/            raw downloads and intermediate files per country (gitignored)
-docs/                 data sources report and caveats
+scripts/              Cloudflare setup and R2 upload used by the deploy workflow
+redirect/             the GitHub Pages redirect
+docs/                 data sources, caveats, world survey of open postcode data
 ```
 
-## Attribution
+## Licences and attribution
 
-Each country's attribution is set in its module and shown on the map. GB:
-*Contains OS data © Crown copyright and database right 2026 · Contains Royal
-Mail data © Royal Mail copyright and database right 2026 · Contains ONS data ©
-Crown copyright and database right 2026, OGL v3*. Austria: *© Österreichisches
-Adressregister, data of the record date 01.04.2026 (BEV) · Postleitzahlen:
-RTR-GmbH, CC BY 4.0 · Datenquelle: Statistik Austria*. Netherlands:
-*Postcodegebieden: © CBS / Esri Nederland (CC BY 4.0) · Place names: GeoNames
-(CC BY 4.0)*. Plus the basemap's own
-attribution (OpenFreeMap / OpenMapTiles / OpenStreetMap
-contributors), which MapLibre adds from the style. Keep these visible in any
-deployment.
+The code is MIT licensed. The data keeps its sources' licences, all of
+which require attribution, and the map shows each country's line in its
+attribution bar:
+
+- Great Britain: *Contains OS data © Crown copyright and database right
+  2026 · Contains Royal Mail data © Royal Mail copyright and database right
+  2026 · Contains ONS data © Crown copyright and database right 2026*, Open
+  Government Licence v3.
+- Austria: *© Österreichisches Adressregister, data of the record date
+  01.04.2026 (BEV) · Postleitzahlen: RTR-GmbH, CC BY 4.0 · Datenquelle:
+  Statistik Austria*.
+- Netherlands: *Postcodegebieden: © CBS / Esri Nederland (CC BY 4.0) · Place
+  names: GeoNames (CC BY 4.0)*.
+- Basemap: OpenFreeMap, OpenMapTiles, © OpenStreetMap contributors (added
+  by MapLibre from the style).
+
+Keep these visible in any deployment. The derived GB and Austrian polygons
+are derivatives of the respective point data and carry the same terms.
