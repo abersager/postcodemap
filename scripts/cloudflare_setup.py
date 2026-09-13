@@ -14,7 +14,7 @@ Environment: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, optionally DOMAIN
 PRODUCTION_BRANCH (the git branch deploys come from).
 
 Token permissions: Account → Workers R2 Storage: Edit, Cloudflare Pages: Edit;
-Zone ($DOMAIN) → Zone: Read, DNS: Edit, Cache Rules: Edit, Cache Settings: Edit
+Zone ($DOMAIN) → Zone: Read, DNS: Edit, Cache Rules: Edit, Zone Settings: Edit
 (the last only for Smart Tiered Cache; skipped with a note if missing).
 """
 import json
@@ -97,7 +97,7 @@ else:
 # Edges fill from one upper-tier data centre near the bucket instead of each
 # pulling the whole archive from R2 on its first range request.
 r = cf("PATCH", f"/zones/{ZONE}/cache/tiered_cache_smart_topology_enable", {"value": "on"}, quiet_errors=(10000, 1001, 403, 9109))
-step("smart tiered cache " + ("enabled" if r.get("result") else f"not enabled (token lacks Cache Settings: Edit?) {r.get('errors')}"))
+step("smart tiered cache " + ("enabled" if r.get("result") else f"not enabled (token lacks Zone Settings: Edit?) {r.get('errors')}"))
 
 # ---------------------------------------------------------------- Pages project + apex domain
 proj = cf("GET", f"/accounts/{ACCOUNT}/pages/projects/{PROJECT}", quiet_errors=(8000007,))
