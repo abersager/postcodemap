@@ -5,7 +5,10 @@ export default {
   // tiles inside each archive's bounds, so unused countries cost one small
   // header request each.
   countries: ["gb", "at"],
-  countryBase: "countries/",
+  // Where each country's files are served from (+ "<cc>/meta.json" etc.).
+  // Relative for local builds; the Cloudflare deploy sets VITE_COUNTRY_BASE to
+  // the versioned R2 prefix, e.g. https://data.postcodemap.net/v/<ver>/countries/
+  countryBase: import.meta.env.VITE_COUNTRY_BASE || "countries/",
 
   // Zoom thresholds come from each country's meta.json (see pipeline/countries/).
   // Override per country and level id here, e.g. { gb: { district: 8, sector: 11, unit: 13 } }.

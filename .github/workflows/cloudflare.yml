@@ -1,0 +1,73 @@
+# Builds every country's data from the live open sources, uploads it to R2
+# under a versioned prefix and deploys the app to Cloudflare Pages at
+# https://postcodemap.net. Manual trigger only.
+#
+# Secrets: CLOUDFLARE_API_TOKEN (permissions in scripts/cloudflare_setup.py),
+#          CLOUDFLARE_ACCOUNT_ID.
+# Run scripts/cloudflare_setup.py once first (the "setup" input does it here).
+name: Deploy to Cloudflare (R2 + Pages)
+on:
+  workflow_dispatch:
+    inputs:
+      setup:
+        description: "Run the one-time Cloudflare setup (bucket, domains, cache rule) first"
+        type: boolean
+        default: false
+
+env:
+  DOMAIN: postcodemap.net
+  BUCKET: postcodemap
+  PAGES_PROJECT: postcodemap
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: { enable-cache: true }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm }
+      - name: Cloudflare setup (idempotent)
+        if: ${{ inputs.setup }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_BRANCH: ${{ github.ref_name }}
+        run: python3 scripts/cloudflare_setup.py
+      - name: Install tippecanoe
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential libsqlite3-dev zlib1g-dev
+          git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          make -C /tmp/tippecanoe -j"$(nproc)" && sudo make -C /tmp/tippecanoe install
+      - run: uv sync
+      - run: npm ci
+      - name: Build data (one make per country)
+        run: |
+          make COUNTRY=gb
+          make COUNTRY=at
+      - name: Version
+        id: v
+        run: echo "ver=$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Build site pointing at the data host
+        run: npm run build
+        env:
+          VITE_COUNTRY_BASE: https://${{ env.DOMAIN }}/v/${{ steps.v.outputs.ver }}/countries/
+      - name: Upload data to R2 (versioned, immutable)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VER: ${{ steps.v.outputs.ver }}
+        run: |
+          cd dist
+          put() { f="$1"; case "$f" in *.json) ct=application/json;; *.pmtiles) ct=application/octet-stream;; *) ct=application/octet-stream;; esac
+                  npx wrangler r2 object put "$BUCKET/v/$VER/$f" --file "$f" --content-type "$ct" --cache-control "public, max-age=31536000, immutable" --remote >/dev/null; }
+          export -f put; export BUCKET VER
+          find countries -type f | xargs -P 12 -I{} bash -c 'put "$@"' _ {}
+          echo "uploaded $(find countries -type f | wc -l) files to v/$VER/"
+          rm -rf countries   # not part of the Pages upload
+      - name: Deploy app to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deploy dist --project-name "$PAGES_PROJECT" --branch "${{ github.ref_name }}" --commit-dirty=true
