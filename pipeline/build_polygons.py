@@ -16,9 +16,10 @@ Method (all geometry in the country's working projection, output in WGS84):
   4. Boundary lines between polygons (never the coast), label points and
      WGS84 bounding boxes are written alongside the polygons.
 
-Countries with official polygons (module has read_polygons) skip steps 1 and 3:
-the finest level is read as given, coarser levels are dissolved from it, and
-nothing is clipped.
+Countries with official polygons (module has read_polygons) skip step 1: the
+finest level is read as given and coarser levels are dissolved from it. Step 3
+runs only if the module provides a mask (NO, whose polygons run out to sea);
+polygons entirely outside the mask's extent (Svalbard) are kept unclipped.
 
 Outputs, per polygon level `<id>`: <out>/<id>.geojsonl, <id>_lines.geojsonl,
 <id>_labels.geojsonl.
@@ -57,6 +58,7 @@ class Proj:
     def __init__(self, lon, lat):
         lon0, lat0 = float(np.median(lon)), float(np.median(lat))
         crs = f"+proj=tmerc +lat_0={lat0:.4f} +lon_0={lon0:.4f} +k=0.9996 +x_0=500000 +y_0=0 +ellps=WGS84 +units=m +no_defs"
+        self.crs = crs
         self.fwd = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
         self.inv = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
 
@@ -144,9 +146,10 @@ def dissolve(geoms, keys, check=False):
     return out
 
 
-def load_official(mod, raw_dir, proj, wanted):
+def load_official(mod, raw_dir, proj, top, wanted):
     """Finest-level polygons from the country module (official source), in the
-    working projection, restricted to the codes in units.csv (sample builds)."""
+    working projection, restricted to the coarsest-level codes present in
+    units.csv (so sample builds stay small)."""
     out, dups, batch_codes, batch_geoms = {}, 0, [], []
 
     def flush():
@@ -169,7 +172,7 @@ def load_official(mod, raw_dir, proj, wanted):
 
     for raw, g in mod.read_polygons(raw_dir):
         p = mod.parse(raw)
-        if p is None or p["code"] not in wanted:
+        if p is None or p[top] not in wanted:
             continue
         batch_codes.append(p["code"]); batch_geoms.append(g)
         if len(batch_codes) >= 20000:
@@ -198,7 +201,9 @@ def load_mask(path, proj, xy, cache=None):
     """Union of the mask features that contain at least one point (features
     with no points, e.g. Northern Ireland for Code-Point Open, are dropped).
     Prepared features are cached until the file or parameters change."""
-    key = f"{os.path.getmtime(path)}:{os.path.getsize(path)}:v3:{MIN_HOLE_M2}"
+    # the prepared mask is in the working projection, which depends on the points (a
+    # sample build centres it elsewhere), so the projection is part of the key
+    key = f"{os.path.getmtime(path)}:{os.path.getsize(path)}:v4:{MIN_HOLE_M2}:{proj.crs}"
     prepared = None
     if cache and os.path.exists(cache):
         with open(cache, "rb") as f:
@@ -267,19 +272,35 @@ def subdivide(mask, size=25000.0):
 
 
 class Clipper:
-    def __init__(self, pieces):
+    """Intersects geometries with the land pieces. With `extent` (the mask's
+    bounding box, official polygons only), geometries that lie entirely outside
+    it are returned as they are: the mask does not cover them (N500 stops at the
+    mainland, Svalbard's postcodes lie beyond)."""
+
+    def __init__(self, pieces, extent=None):
         self.pieces = pieces
         self.tree = STRtree(pieces)
+        self.extent = extent
+        self.kept_outside = 0
+
+    def outside(self, geoms):
+        return np.zeros(len(geoms), dtype=bool) if self.extent is None else ~shapely.intersects(geoms, self.extent)
 
     def clip(self, geom):
+        keep = []  # parts beyond the extent (a region polygon spanning mainland and Svalbard)
+        if self.extent is not None:
+            parts = shapely.get_parts(geom)
+            out = ~shapely.intersects(parts, self.extent)
+            if out.any():
+                self.kept_outside += 1
+                keep = list(parts[out])
+                if out.all():
+                    return geom
+                geom = shapely.union_all(parts[~out])
         hits = self.tree.query(geom, predicate="intersects")
-        if len(hits) == 0:
-            return None
-        inter = [g for g in shapely.intersection(self.pieces[hits], geom) if not g.is_empty]
-        if not inter:
-            return None
-        out = shapely.union_all(inter) if len(inter) > 1 else inter[0]
-        polys = [g for g in shapely.get_parts(out) if g.geom_type == "Polygon" and g.area > 1]
+        inter = [g for g in shapely.intersection(self.pieces[hits], geom) if not g.is_empty] if len(hits) else []
+        out = shapely.union_all(inter) if inter else shapely.Polygon()
+        polys = [g for g in shapely.get_parts(out) if g.geom_type == "Polygon" and g.area > 1] + keep
         if not polys:
             return None
         return shapely.multipolygons(polys) if len(polys) > 1 else polys[0]
@@ -305,9 +326,10 @@ def interior_lines(polys, clipper=None):
         return []
     lines = shapely.linestrings(shared.reshape(-1, 2, 2))
     if clipper is not None:
-        li, pi = clipper.tree.query(lines, predicate="intersects")
-        lines = shapely.intersection(lines[li], clipper.pieces[pi])
-        lines = lines[~shapely.is_empty(lines)]
+        out = clipper.outside(lines)  # beyond the mask's extent: kept whole
+        li, pi = clipper.tree.query(lines[~out], predicate="intersects")
+        clipped = shapely.intersection(lines[~out][li], clipper.pieces[pi])
+        lines = np.concatenate([clipped[~shapely.is_empty(clipped)], lines[out]])
     parts = [g for g in shapely.get_parts(lines) if g.geom_type == "LineString"]
     merged = shapely.line_merge(shapely.multilinestrings(parts)) if parts else shapely.MultiLineString()
     return [g for g in shapely.get_parts(merged) if g.length > 0]
@@ -385,13 +407,21 @@ def main():
                 parent.setdefault(l, {})[codes[l][i]] = codes[level_ids[j - 1]][i]
 
     if official:
-        log("official polygons: reading from the country module (no Voronoi, no clipping)")
-        fine_polys = load_official(mod, a.raw_dir, proj, set(fine))
+        log("official polygons: reading from the country module (no Voronoi)")
+        fine_polys = load_official(mod, a.raw_dir, proj, level_ids[0], set(codes[level_ids[0]]))
         no_territory = sorted(set(fine) - set(fine_polys))
         if no_territory:
             log(f"{len(no_territory)} {finest} codes have no polygon in the source")
+        unpopulated = sorted(set(fine_polys) - set(fine))
+        if unpopulated:
+            log(f"{len(unpopulated)} {finest} polygons contain no point; kept with a count of 0")
+        for code in unpopulated:  # their parents cannot come from units.csv
+            p = mod.parse(code)
+            for j in range(1, len(level_ids)):
+                parent.setdefault(level_ids[j], {})[p[level_ids[j]]] = p[level_ids[j - 1]]
         polys = {finest: fine_polys}
-        uxy, outside = np.empty((0, 2)), []
+        x, y = proj.fwd.transform(lon, lat)
+        uxy, outside = np.unique(np.round(np.column_stack([x, y]), 1), axis=0), []
     else:
         x, y = proj.fwd.transform(lon, lat)
         xy = np.column_stack([x, y])
@@ -413,17 +443,19 @@ def main():
         polys[lvl] = dissolve(list(polys[child].values()), [parent[child][c] for c in polys[child]], check=official)
         log(f"{len(polys[lvl])} {lvl}")
 
-    mask_path = mod.mask(a.raw_dir) if hasattr(mod, "mask") and not official else None
-    if official:
-        clipper, mask_source = None, "none (official polygons)"
-    elif mask_path:
+    mask_path = mod.mask(a.raw_dir) if hasattr(mod, "mask") else None
+    clipper = None
+    if mask_path:
         log(f"mask: {mask_path}")
         mask = load_mask(mask_path, proj, uxy, a.mask_cache)
         mask_source = "country"
+    elif official:
+        mask, mask_source = None, "none (official polygons)"
     else:
         log("no mask from the country module: building occupancy-grid mask (derived, blocky edges)")
         mask, mask_source = grid_mask(uxy), "grid"
-    if not official:
+    if mask is not None:
+        extent = shapely.box(*mask.bounds) if official else None
         pieces = subdivide(mask)
         tree = STRtree(pieces)
         hit, _ = tree.query(shapely.points(uxy), predicate="intersects")
@@ -431,7 +463,7 @@ def main():
         if len(outside):
             log(f"{len(outside)} point locations fall outside the mask; adding 250 m buffers")
             pieces = np.concatenate([pieces, shapely.buffer(shapely.points(uxy[outside]), 250, quad_segs=4)])
-        clipper = Clipper(pieces)
+        clipper = Clipper(pieces, extent)
         log(f"mask ready ({len(pieces)} pieces)")
 
     names = mod.names(a.raw_dir) if hasattr(mod, "names") else {}
@@ -443,7 +475,8 @@ def main():
         else:
             clipped = {k: clipper.clip(g) for k, g in polys[lvl].items()}
             lost[lvl] = [k for k, g in clipped.items() if g is None]
-            log(f"clipped {lvl} ({len(lost[lvl])} lost)")
+            log(f"clipped {lvl} ({len(lost[lvl])} lost, {clipper.kept_outside} beyond the mask's extent kept whole)")
+            clipper.kept_outside = 0
         write_level(a.out, lvl, clipped, proj, counts[lvl], parent.get(lvl), names.get(lvl))
 
     if a.report:
@@ -451,7 +484,8 @@ def main():
             json.dump({"country": a.country, "official": official, "points": n, "distinct_locations": int(len(uxy)),
                        "polygons": {l: len(polys[l]) for l in level_ids}, "mask": mask_source,
                        "points_outside_mask": int(len(outside)), "lost": lost,
-                       "codes_without_territory": no_territory, "seconds": round(time.time() - T0, 1)}, f, indent=1)
+                       "codes_without_territory": no_territory, "polygons_without_points": unpopulated if official else [],
+                       "seconds": round(time.time() - T0, 1)}, f, indent=1)
     log("done")
 
 

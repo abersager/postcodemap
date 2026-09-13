@@ -25,14 +25,18 @@ zoom thresholds, an optional point level, attribution, `download()`,
 `parse()` (splits a code into the levels) and optionally `names()` and `mask()`
 (land polygons for clipping). A country with official polygons implements
 `read_polygons()` instead of relying on the Voronoi derivation; its
-`read_units()` then yields one representative point per finest code. The
-generic scripts never contain country logic.
+`read_units()` then yields either one representative point per finest code
+(NL) or the country's addresses (NO, `POINT_NOUN = "addresses"`), which give
+the counts. If it also provides `mask()`, the official polygons are clipped
+to it (NO, whose polygons run out to sea). The generic scripts never contain
+country logic.
 
 | Country | Module | Source | Levels | Polygons |
 |---|---|---|---|---|
 | Great Britain | `gb.py` | OS Code-Point Open unit postcodes (1.7 M); ONSPD or a CSV via `SOURCE=` | area, district, sector + unit points | derived, clipped to ONS country boundaries (BGC) |
 | Austria | `at.py` | BEV Adressregister addresses (2.5 M), each with its PLZ | zone (1 digit), region (2 digits), PLZ | derived, clipped to Statistik Austria municipalities |
 | Netherlands | `nl.py` | CBS "Kerncijfers per postcode" PC6 GeoPackage (466 k polygons); GeoNames for PC4 names | pc2, pc4, pc5, pc6 | official PC6, coarser levels dissolved |
+| Norway | `no.py` | Kartverket Postnummerområder GeoJSON (3.4 k polygons, names included); Matrikkelen addresses CSV (2.6 M); N500 Kartdata GML for the land mask | zone, region, postnr | official, clipped to N500 land areas (everything but `Havflate`), coarser levels dissolved |
 
 ## Tools
 
@@ -73,11 +77,14 @@ codes, dedupes unit postcodes (addresses are not deduped) and writes
 
 ### 2. `build_polygons.py`
 
-For a country with `read_polygons()` (NL) the finest level is read as given,
-projected to the local transverse Mercator, dissolved into each coarser level
-with coverage unions (checked, with a proper union as fallback where the
-source overlaps itself) and written without clipping; boundary lines are the
-edges shared by neighbouring polygons. Otherwise:
+For a country with `read_polygons()` (NL, NO) the finest level is read as
+given, projected to the local transverse Mercator and dissolved into each
+coarser level with coverage unions (checked, with a proper union as fallback
+where the source overlaps itself). Without a `mask()` (NL) nothing is
+clipped; with one (NO) every level is clipped like derived polygons, except
+that polygons entirely outside the mask's extent (Svalbard and Jan Mayen,
+beyond N500) are kept whole. Polygons whose code has no address keep a count
+of 0. Otherwise:
 
 1. Projects every point to a local transverse Mercator centred on the data and
    computes the Voronoi diagram of all distinct locations (scipy/Qhull; 1.7 M
@@ -120,10 +127,12 @@ for countries with a point level, `points.pmtiles`:
 
 - `boundaries.pmtiles`: one polygon layer per level (GB: `area` z0–10,
   `district` z6–12, `sector` z9–12) and its `*_labels` point layer (code
-  only). Derived levels also get a `*_lines` layer with the boundaries
-  between polygons but not the coast; official polygons (NL) are outlined by
-  the app directly, which halves their archive. A level whose threshold is
-  above z12 (NL `pc6` at 13) is tiled at z12 only. `--detect-shared-borders`
+  only). Levels clipped to a land mask (derived ones, and official ones with
+  a `mask()` such as NO) also get a `*_lines` layer with the boundaries
+  between polygons but not the coast; unclipped official polygons (NL) are
+  outlined by the app directly, which halves their archive (`meta.json`
+  `lines` says which). A level whose threshold is above z12 (NL `pc6` at 13)
+  is tiled at z12 only. `--detect-shared-borders`
   keeps neighbouring polygons consistent when simplified. MapLibre overzooms
   z12 tiles for closer views; boundary lines are straight Voronoi edges or
   official outlines, so that costs little visible.
@@ -165,11 +174,14 @@ takes about 30 s the first time and is cached afterwards.
 A country whose postal operator or statistics office publishes polygons
 implements `read_polygons(raw_dir)` in its module, yielding
 `(raw_code, shapely geometry in WGS84)` for every finest-level polygon
-(`countries/nl.py` reads them straight out of a GeoPackage with sqlite3).
-`build_polygons.py` then skips the Voronoi and clipping steps entirely. For
-GB a third-party polygon set (for example the doogal.co.uk district and
-sector KML, itself Voronoi-derived) could be wired in the same way, but it
-would inherit the OS/Royal Mail terms plus the publisher's own.
+(`countries/nl.py` reads them straight out of a GeoPackage with sqlite3,
+`countries/no.py` from GeoJSON). `build_polygons.py` then skips the Voronoi
+step, and the clipping step too unless the module provides a `mask()`
+(`no.py` builds one from the N500 land-cover GML with the standard library's
+XML parser: every area type except the sea surface, unioned). For GB a
+third-party polygon set (for example the doogal.co.uk district and sector
+KML, itself Voronoi-derived) could be wired in the same way, but it would
+inherit the OS/Royal Mail terms plus the publisher's own.
 
 ## Refreshing after a Royal Mail update
 

@@ -30,8 +30,8 @@ def main():
     keep = set(a.areas.upper().split(",")) if a.areas else None
     stats = Counter()
     seen = set()
-    # unit postcodes and official polygons are one per code; addresses need not be
-    dedupe = mod.POINT_LEVEL is not None or hasattr(mod, "read_polygons")
+    # unit postcodes (and representative points of official polygons) are one per code; addresses are not
+    dedupe = countries.point_noun(mod) != "addresses"
     with open(a.out, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["code", *level_ids, "lon", "lat"])

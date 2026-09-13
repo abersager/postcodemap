@@ -22,8 +22,8 @@ because the licences differ and must not be mixed.
 | Country | System | Levels for the app | Open source (form) | Licence |
 |---|---|---|---|---|
 | Netherlands | 1234 AB (PC6) | PC2, PC4, PC5, PC6 | **Built.** CBS "Kerncijfers per postcode" PC6 GeoPackage (466 k polygons, geometry by Esri Nederland from BAG); GeoNames for PC4 place names | Verified: CC BY 4.0 (attribution of CBS and Esri Nederland required on maps) |
-| Denmark | 4 digits | 1, 2, 4 digits | DAWA/DAGI postnumre polygons; address points | Verified: CC BY 4.0 |
-| Norway | 4 digits | 1, 2, 4 digits | Kartverket "Postnummerområder" polygons (boundaries from Posten) | Verified: CC BY 4.0 |
+| Denmark | 4 digits | 1, 2, 4 digits | DAGI postnumre polygons; DAR address points. **On hold:** the key-less DAWA API closes on 1 October 2026 and every Datafordeler distribution needs a (free) service user; see issue #3 | Verified: CC BY 4.0 |
+| Norway | 4 digits | 1, 2, 4 digits | **Built.** Kartverket "Postnummerområder" polygons (boundaries from Posten Norge; extend over sea, clipped to N500 land areas); Matrikkelen addresses for counts. Direct downloads from Geonorge, no login | Verified: CC BY 4.0 |
 | Finland | 5 digits | 2, 3, 5 digits | Statistics Finland Paavo postal-code area polygons | Verified: Statistics Finland open data terms (CC BY 4.0) |
 | Switzerland + Liechtenstein | 4 digits | 1, 2, 4 digits (+PLZ6) | swisstopo "Amtliches Ortschaftenverzeichnis mit PLZ und Perimeter" polygons | Verified: Swiss OGD, free |
 | Austria | 4 digits | 1, 2, 4 digits | **Built.** BEV Adressregister (2.5 M geocoded addresses with PLZ, twice yearly); RTR postcode list for names; Statistik Austria municipalities as mask. No official PLZ polygons exist (the data.gv.at "Postleitzahlen" entry is RTR's CSV list) | Verified: BEV licence (attribution required), RTR CC BY 4.0, Statistik Austria CC BY 4.0 |

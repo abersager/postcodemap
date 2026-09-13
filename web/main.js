@@ -71,8 +71,8 @@ map.on("load", () => {
 
 function addCountry(c) {
   const polys = c.levels.filter((l) => l.kind === "polygon");
-  // derived polygons come with `<id>_lines` layers that leave out the coast; official ones are outlined as they are
-  const outline = (lvl) => (c.meta.official ? lvl.id : `${lvl.id}_lines`);
+  // polygons clipped to a land mask come with `<id>_lines` layers that leave out the coast; others are outlined as they are
+  const outline = (lvl) => ((c.meta.lines ?? !c.meta.official) ? `${lvl.id}_lines` : lvl.id);
   map.addSource(`${c.cc}-boundaries`, {
     type: "vector", url: "pmtiles://" + c.base + "boundaries.pmtiles",
     promoteId: Object.fromEntries(polys.map((l) => [l.id, "code"])), attribution: c.meta.attribution,

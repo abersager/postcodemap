@@ -9,6 +9,8 @@
 | PLZ, regions, zones (AT) | **Derived** | Voronoi cells of 2.5 M addresses dissolved by PLZ, then by 2-digit and 1-digit prefix, clipped to the union of Statistik Austria's municipalities. Austrian Post publishes no PLZ polygons. |
 | PC6 (NL) | **Official** | Polygons from CBS "Kerncijfers per postcode" (2025 edition), the geometry of every PC6 area as Esri Nederland derives it from BAG address positions for CBS. Only PC6 codes with addresses exist; large uninhabited areas (water, nature) belong to whichever neighbouring PC6 the source assigns them to. |
 | PC5, PC4, regions (NL) | **Dissolved from official** | Unions of the official PC6 polygons by prefix; exact where the PC6 layer is exact. |
+| Postcodes (NO) | **Official, clipped** | Kartverket "Postnummerområder" (boundaries maintained by Posten Norge, stated accuracy 1.5 km). The source polygons extend over fjords and coastal waters, so they are clipped to the land areas of Kartverket's N500 map data (1:500 000; lakes, rivers and glaciers count as land). Svalbard and Jan Mayen lie outside N500 and keep their sea-covering polygons. The address count per postcode comes from Matrikkelen (road and cadastral addresses). |
+| Regions, zones (NO) | **Dissolved from official** | Unions of the postcode polygons by 2-digit and 1-digit prefix. |
 | Sectors   | **Derived**   | Union of the Voronoi cells of the sector's unit centroids, clipped to the coastline.      |
 | Districts | **Derived**   | Union of derived sectors.                                                                |
 | Areas     | **Derived**   | Union of derived districts.                                                              |
@@ -68,6 +70,9 @@ What "derived" means in practice:
   attribution of CBS for the data and of both CBS and Esri Nederland when the
   map is visualised, hence *Postcodegebieden: © CBS / Esri Nederland*.
   **GeoNames** PC4 place names: CC BY 4.0.
+- **Kartverket** (Norway): Postnummerområder, Matrikkelen addresses and N500
+  Kartdata are CC BY 4.0 (Norway's open geodata licence); credit *Kartverket*
+  and, for the postcode boundaries, *Posten Norge*.
 - **This repository's code**: see LICENSE (MIT).
 
 ## Currency and refresh

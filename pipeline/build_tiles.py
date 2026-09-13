@@ -4,9 +4,9 @@
     python pipeline/build_tiles.py <cc> <polygons_dir> <units.csv> --out <dir> [--tmp <dir>]
 
 Writes <out>/boundaries.pmtiles (all polygon levels, their `<id>_labels`
-layers and, for derived polygons, `<id>_lines` boundary layers that leave out
-the coast; official polygons are outlined directly by the app) and, for
-countries with a point level, <out>/points.pmtiles.
+layers and, for polygons clipped to a land mask, `<id>_lines` boundary layers
+that leave out the coast; unclipped official polygons are outlined directly by
+the app) and, for countries with a point level, <out>/points.pmtiles.
 
 Zoom ranges follow the country's default thresholds with two levels of
 headroom below (thresholds can be lowered in config without re-tiling) and
@@ -45,6 +45,7 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     os.makedirs(tmp, exist_ok=True)
     derived = not hasattr(mod, "read_polygons")
+    lines = countries.clipped(mod)
     attr = mod.ATTRIBUTION + (" &middot; Postcode polygons are derived (Voronoi of unit points), not official." if derived else "")
     common = ["--force", "--no-tile-size-limit", "--no-feature-limit", f"--attribution={attr}"]
 
@@ -54,13 +55,13 @@ def main():
         minz = POLY_MAX if lvl["threshold"] > POLY_MAX else max(0, lvl["threshold"] - 2)
         maxz = POLY_MAX if i > 0 else max(levels[1]["threshold"] + 2, 6) if len(levels) > 1 else POLY_MAX
         lid = lvl["id"]
-        poly, lines, labels = (os.path.join(tmp, f"{lid}{s}.pmtiles") for s in ("", "_lines", "_labels"))
+        poly, lines_pm, labels = (os.path.join(tmp, f"{lid}{s}.pmtiles") for s in ("", "_lines", "_labels"))
         run(["tippecanoe", *common, "--detect-shared-borders", "--simplification=4", "-o", poly, "-l", lid, f"-Z{minz}", f"-z{maxz}", os.path.join(a.polygons, f"{lid}.geojsonl")])
         run(["tippecanoe", *common, "-r1", "-y", "code", "-o", labels, "-l", f"{lid}_labels", f"-Z{minz}", f"-z{maxz}", os.path.join(a.polygons, f"{lid}_labels.geojsonl")])
         parts += [poly, labels]
-        if derived:
-            run(["tippecanoe", *common, "--simplification=4", "-o", lines, "-l", f"{lid}_lines", f"-Z{minz}", f"-z{maxz}", os.path.join(a.polygons, f"{lid}_lines.geojsonl")])
-            parts.append(lines)
+        if lines:
+            run(["tippecanoe", *common, "--simplification=4", "-o", lines_pm, "-l", f"{lid}_lines", f"-Z{minz}", f"-z{maxz}", os.path.join(a.polygons, f"{lid}_lines.geojsonl")])
+            parts.append(lines_pm)
     # tile-join has its own 500 KB tile limit (-pk lifts it) and silently drops features beyond it
     run(["tile-join", "--force", "-pk", "-o", os.path.join(a.out, "boundaries.pmtiles"), f"--name={mod.NAME} postcode boundaries{' (derived)' if derived else ''}", f"--attribution={attr}", *parts])
 

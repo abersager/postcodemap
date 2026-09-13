@@ -16,7 +16,8 @@ build_polygons, build_tiles, build_index) only talk to this interface:
                   the density readout ("postcodes/km²", "addresses/km²").
     SHARD_LEVEL   level id used to shard the point search index (None if no points)
     POINT_NOUN    optional: what the points are, for the density readout; defaults
-                  to POINT_LEVEL["noun"] or "points"
+                  to POINT_LEVEL["noun"] or "points". "addresses" also tells
+                  build_points that several points may share a code (no dedupe)
     ATTRIBUTION   HTML shown in the map's attribution control
     LICENCE       short licence statement for docs and meta.json
     download(raw_dir)            fetch source files (idempotent)
@@ -28,10 +29,14 @@ build_polygons, build_tiles, build_index) only talk to this interface:
     parse(raw_code) -> dict      {"code": normalised finest code, <level id>: code, ...}
                                  or None if the code is not valid/geographic
     names(raw_dir) -> dict       optional: {<level id>: {code: place name}}
-    mask(raw_dir) -> path|None   optional: GeoJSON (WGS84) land polygons for clipping
-                                 derived polygons (ignored with official polygons)
+    mask(raw_dir) -> path|None   optional: GeoJSON (WGS84) land polygons; derived
+                                 polygons are always clipped to it, official ones
+                                 only when the module provides it (NO, whose
+                                 polygons run out to sea; NL's already stop at the
+                                 coast). Clipped polygons get `_lines` layers so
+                                 the map never draws the coast
 
-Countries with official polygons (NL) add:
+Countries with official polygons (NL, NO) add:
 
     read_polygons(raw_dir) -> iter  yields (raw_code, shapely geometry in WGS84) for
                                     every finest-level polygon; build_polygons.py then
@@ -48,6 +53,17 @@ import importlib
 
 def get(code):
     return importlib.import_module(f"countries.{code.lower()}")
+
+
+def point_noun(mod):
+    """What one row of read_units() is: "postcodes" (one point per code) or "addresses"."""
+    return getattr(mod, "POINT_NOUN", None) or (mod.POINT_LEVEL or {}).get("noun") or "points"
+
+
+def clipped(mod):
+    """Whether the polygons are cut to a land mask (derived always; official only
+    with a mask), and hence come with `_lines` layers instead of their own outline."""
+    return not hasattr(mod, "read_polygons") or hasattr(mod, "mask")
 
 
 def levels_all(mod):

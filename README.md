@@ -1,15 +1,16 @@
 # Postcode map
 
 An interactive map of postcode boundaries, live at
-**https://postcodemap.net**. It covers Great Britain, Austria and the
-Netherlands and shows more detail as you zoom in, from 1- or 2-character
-regions down to individual postcodes:
+**https://postcodemap.net**. It covers Great Britain, Austria, the
+Netherlands and Norway and shows more detail as you zoom in, from 1- or
+2-character regions down to individual postcodes:
 
 | Country | Levels, coarse to fine | Source of the geometry |
 |---|---|---|
 | Great Britain | area (`SW`) → district (`SW1A`) → sector (`SW1A 2`) → unit (`SW1A 2AA`, drawn as points) | polygons derived from OS Code-Point Open unit centroids |
 | Austria | zone (`1`) → region (`10`) → PLZ (`1010`) | polygons derived from the BEV address register (2.5 M geocoded addresses) |
 | Netherlands | region (`10`) → PC4 (`1012`) → PC5 (`1012A`) → PC6 (`1012AB`) | official PC6 polygons from Statistics Netherlands (CBS), dissolved upwards |
+| Norway | zone (`0`) → region (`01`) → postcode (`0150`) | official postcode polygons from Kartverket (boundaries by Posten Norge), clipped to the N500 coastline |
 
 The site is fully static: [MapLibre GL JS](https://maplibre.org/) reads
 [PMTiles](https://docs.protomaps.com/pmtiles/) archives with HTTP range
@@ -19,8 +20,9 @@ committed.
 
 ## What the boundaries mean
 
-Only the Netherlands publishes postcode polygons as open data. For Great
-Britain and Austria the open data consists of **points** (one per unit
+The Netherlands and Norway publish postcode polygons as open data (Norway's
+run out to sea, so the pipeline clips them to Kartverket's coastline). For
+Great Britain and Austria the open data consists of **points** (one per unit
 postcode, or one per address) and the pipeline **derives** polygons from
 them: it computes the Voronoi cell of every point, dissolves the cells up
 the code hierarchy and clips the result to the country's coastline or
@@ -53,6 +55,7 @@ npm install
 make            # Great Britain: downloads Code-Point Open and the ONS coastline, ~10 min
 make COUNTRY=at # Austria: BEV address register, 100 MB download, ~5 min
 make COUNTRY=nl # Netherlands: CBS PC6 polygons, 190 MB download, ~5 min
+make COUNTRY=no # Norway: Kartverket polygons, addresses and N500 map data, 230 MB download, ~5 min
 npm run dev     # http://localhost:5173
 ```
 
@@ -63,6 +66,7 @@ a quick build of a few top-level codes only:
 ```bash
 make sample COUNTRY=gb SAMPLE_AREAS=SW,W,WC,EC   # central London in about a minute
 make sample COUNTRY=nl SAMPLE_AREAS=10,11         # Amsterdam
+make sample COUNTRY=no SAMPLE_AREAS=0,1           # Oslo and the east
 ```
 
 The pipeline stages, timings and how to add a country are described in
@@ -87,7 +91,7 @@ The pipeline stages, timings and how to add a country are described in
 All tunables are in [`web/config.js`](web/config.js):
 
 ```js
-countries: ["gb", "at", "nl"],   // countries to load (each needs a build in web/public/countries/)
+countries: ["gb", "at", "nl", "no"],   // countries to load (each needs a build in web/public/countries/)
 thresholds: { gb: { district: 8, sector: 11, unit: 13 } },   // per-country overrides of the zoom at which each level appears
 density: { enabled: true, baseUnitsPerKm2: 40, maxShift: 2 },
 ```
@@ -151,6 +155,7 @@ Sizes of a full build:
 | `countries/at/boundaries.pmtiles` | ~7 MB |
 | `countries/nl/boundaries.pmtiles` | ~77 MB (466 k official PC6 polygons at z12, PC5 at z9–12) |
 | `countries/nl/index.json` + `units.bin` | ~7 MB (PC5/PC6 codes as gzipped slices fetched by range) |
+| `countries/no/boundaries.pmtiles` | ~23 MB (3.4 k official postcode polygons along a very long coastline) |
 | app bundle | < 1 MB |
 
 This is well inside R2's free tier (10 GB stored, 10 M reads a month, reads
@@ -196,6 +201,8 @@ attribution bar:
   Statistik Austria*.
 - Netherlands: *Postcodegebieden: © CBS / Esri Nederland (CC BY 4.0) · Place
   names: GeoNames (CC BY 4.0)*.
+- Norway: *Postnummerområder: © Kartverket / Posten Norge (CC BY 4.0) ·
+  Addresses (Matrikkelen) and coastline (N500): © Kartverket (CC BY 4.0)*.
 - Basemap: OpenFreeMap, OpenMapTiles, © OpenStreetMap contributors (added
   by MapLibre from the style).
 

@@ -106,6 +106,7 @@ def main():
         "bounds": [round(b, 4) for b in bounds],
         "attribution": mod.ATTRIBUTION, "licence": mod.LICENCE,
         "official": hasattr(mod, "read_polygons"),
+        "lines": countries.clipped(mod),   # outline from `<id>_lines` layers (coast left out) rather than the polygons
         "counts": {l: len(tables[l]) for l in level_ids},
         "hasPoints": bool(mod.POINT_LEVEL), "hasShards": bool(shard_level),
     }
