@@ -21,11 +21,27 @@ build_polygons, build_tiles, build_index) only talk to this interface:
     LICENCE       short licence statement for docs and meta.json
     download(raw_dir)            fetch source files (idempotent)
     read_units(raw_dir) -> iter  yields (raw_code, lon, lat) for every point
-                                 (unit postcode or address); WGS84
+                                 (unit postcode or address); WGS84. For countries
+                                 with official polygons: one representative point
+                                 per finest code (used for sample selection, counts
+                                 and the level hierarchy)
     parse(raw_code) -> dict      {"code": normalised finest code, <level id>: code, ...}
                                  or None if the code is not valid/geographic
-    names(raw_dir) -> dict       optional: finest-level code -> place name
+    names(raw_dir) -> dict       optional: {<level id>: {code: place name}}
     mask(raw_dir) -> path|None   optional: GeoJSON (WGS84) land polygons for clipping
+                                 derived polygons (ignored with official polygons)
+
+Countries with official polygons (NL) add:
+
+    read_polygons(raw_dir) -> iter  yields (raw_code, shapely geometry in WGS84) for
+                                    every finest-level polygon; build_polygons.py then
+                                    skips the Voronoi derivation and dissolves the
+                                    coarser levels from these
+    SHARDED_LEVELS   optional: polygon levels too numerous for index.json (NL PC5/PC6);
+                     their codes and bounding boxes go into units.bin, one gzipped slice
+                     per SHARD_LEVEL code, like GB's unit postcodes
+    DENSITY_LEVEL    optional: level whose units/km² drives the app's density shift
+                     (default: the finest polygon level)
 """
 import importlib
 

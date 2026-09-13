@@ -97,7 +97,7 @@ def names(raw_dir):
             if row.get("gueltigbis"):
                 continue
             out.setdefault(row["plz"], row["ort"])
-    return out
+    return {"plz": out}
 
 
 def mask(raw_dir):

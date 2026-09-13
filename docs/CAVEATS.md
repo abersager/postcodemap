@@ -7,6 +7,8 @@
 | Units (GB) | **Official**  | Centroids from OS Code-Point Open (Royal Mail PAF + OS positioning). A point marks the mean position of the delivery points in a postcode, snapped to the nearest address; it is not a boundary. Royal Mail publishes no unit boundaries. |
 | Addresses (AT) | **Official** | BEV Adressregister, every address geocoded to 1 m with its PLZ. Not shown as points; used only to derive the PLZ polygons. |
 | PLZ, regions, zones (AT) | **Derived** | Voronoi cells of 2.5 M addresses dissolved by PLZ, then by 2-digit and 1-digit prefix, clipped to the union of Statistik Austria's municipalities. Austrian Post publishes no PLZ polygons. |
+| PC6 (NL) | **Official** | Polygons from CBS "Kerncijfers per postcode" (2025 edition), the geometry of every PC6 area as Esri Nederland derives it from BAG address positions for CBS. Only PC6 codes with addresses exist; large uninhabited areas (water, nature) belong to whichever neighbouring PC6 the source assigns them to. |
+| PC5, PC4, regions (NL) | **Dissolved from official** | Unions of the official PC6 polygons by prefix; exact where the PC6 layer is exact. |
 | Sectors   | **Derived**   | Union of the Voronoi cells of the sector's unit centroids, clipped to the coastline.      |
 | Districts | **Derived**   | Union of derived sectors.                                                                |
 | Areas     | **Derived**   | Union of derived districts.                                                              |
@@ -62,6 +64,10 @@ What "derived" means in practice:
   quotes *© Österreichisches Adressregister, data of the record date
   01.04.2026*. **RTR postcode list**: CC BY 4.0. **Statistik Austria
   municipalities**: CC BY 4.0, *Datenquelle: Statistik Austria*.
+- **CBS postcode geometry** (Netherlands): CC BY 4.0; CBS requires
+  attribution of CBS for the data and of both CBS and Esri Nederland when the
+  map is visualised, hence *Postcodegebieden: © CBS / Esri Nederland*.
+  **GeoNames** PC4 place names: CC BY 4.0.
 - **This repository's code**: see LICENSE (MIT).
 
 ## Currency and refresh

@@ -1,6 +1,6 @@
 # Postcode map
 
-An interactive map of postcodes, currently Great Britain and Austria, that
+An interactive map of postcodes, currently Great Britain, Austria and the Netherlands, that
 reveals more detail as you zoom in:
 postcode **areas** (SW, EH) → **districts** (SW1A, EH12) → **sectors**
 (SW1A 2) → **unit** postcodes (SW1A 2AA). Layers swap automatically by zoom
@@ -9,7 +9,7 @@ range requests, no backend, no API keys.
 
 ## Coverage
 
-Great Britain (England, Scotland and Wales) and Austria. Each country is a
+Great Britain (England, Scotland and Wales), Austria and the Netherlands. Each country is a
 module in `pipeline/countries/` with its own source, licence and level
 structure, and the app loads every built country at once; the legend follows
 the country under the map centre. Which other countries could be added from
@@ -28,11 +28,14 @@ so it was not used. Isle of Man and the Channel Islands have their own
 postcode systems outside Code-Point Open. See
 [docs/CAVEATS.md](docs/CAVEATS.md).
 
-Everything is built from open data. **Only the points are official** (OS
-Code-Point Open unit postcodes for GB; BEV address register addresses for
-Austria). Every polygon is **derived** by this repo's pipeline (Voronoi
+Everything is built from open data. For GB and Austria **only the points
+are official** (OS Code-Point Open unit postcodes; BEV address register
+addresses) and every polygon is **derived** by this repo's pipeline (Voronoi
 cells of the points, dissolved up the code hierarchy and clipped to the
-country's boundary) because no official open polygons exist. See [docs/CAVEATS.md](docs/CAVEATS.md) before relying on a boundary and
+country's boundary) because no official open polygons exist. The
+Netherlands uses **official PC6 polygons** from Statistics Netherlands (CBS),
+dissolved into PC5, PC4 and 2-digit regions. See
+[docs/CAVEATS.md](docs/CAVEATS.md) before relying on a boundary and
 [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for the source investigation.
 
 ## Quick start
@@ -46,6 +49,7 @@ tippecanoe from source (see [pipeline/README.md](pipeline/README.md)).
 npm install
 make            # Great Britain: downloads Code-Point Open + ONS coastline, builds tiles + index (~10 min)
 make COUNTRY=at # Austria: BEV address register (100 MB download), ~5 min
+make COUNTRY=nl # Netherlands: CBS PC6 polygons (190 MB download), ~5 min
 npm run dev     # http://localhost:5173
 ```
 
@@ -113,6 +117,8 @@ Sizes to expect from a full build:
 | `countries/gb/points.pmtiles`          | ~22 MB  |
 | `countries/gb/index.json` + `units.bin`| ~15 MB (search index; unit lists as gzipped slices fetched by range) |
 | `countries/at/boundaries.pmtiles`      | ~7 MB   |
+| `countries/nl/boundaries.pmtiles`      | ~77 MB (466 k official PC6 polygons at z12, PC5 z9–12) |
+| `countries/nl/index.json` + `units.bin`| ~7 MB (PC5/PC6 codes as gzipped slices fetched by range) |
 | app bundle                             | < 1 MB  |
 
 Well inside R2's free tier (10 GB, 10 M reads a month counted only on cache
@@ -165,7 +171,9 @@ Each country's attribution is set in its module and shown on the map. GB:
 Mail data © Royal Mail copyright and database right 2026 · Contains ONS data ©
 Crown copyright and database right 2026, OGL v3*. Austria: *© Österreichisches
 Adressregister, data of the record date 01.04.2026 (BEV) · Postleitzahlen:
-RTR-GmbH, CC BY 4.0 · Datenquelle: Statistik Austria*. Plus the basemap's own
+RTR-GmbH, CC BY 4.0 · Datenquelle: Statistik Austria*. Netherlands:
+*Postcodegebieden: © CBS / Esri Nederland (CC BY 4.0) · Place names: GeoNames
+(CC BY 4.0)*. Plus the basemap's own
 attribution (OpenFreeMap / OpenMapTiles / OpenStreetMap
 contributors), which MapLibre adds from the style. Keep these visible in any
 deployment.

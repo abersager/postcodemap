@@ -16,6 +16,10 @@ Method (all geometry in the country's working projection, output in WGS84):
   4. Boundary lines between polygons (never the coast), label points and
      WGS84 bounding boxes are written alongside the polygons.
 
+Countries with official polygons (module has read_polygons) skip steps 1 and 3:
+the finest level is read as given, coarser levels are dissolved from it, and
+nothing is clipped.
+
 Outputs, per polygon level `<id>`: <out>/<id>.geojsonl, <id>_lines.geojsonl,
 <id>_labels.geojsonl.
 """
@@ -116,7 +120,10 @@ def voronoi_cells(xy):
     return uxy, inverse, cells
 
 
-def dissolve(geoms, keys):
+def dissolve(geoms, keys, check=False):
+    """Union geometries by key. Coverage unions are exact and fast when the inputs
+    tile the plane without overlap (Voronoi cells always do); with `check`, an
+    invalid result (official polygons that overlap slightly) is redone properly."""
     groups = defaultdict(list)
     for g, k in zip(geoms, keys):
         groups[k].append(g)
@@ -127,11 +134,50 @@ def dissolve(geoms, keys):
             continue
         try:
             out[k] = shapely.coverage_union_all(gs)
+            if check and not out[k].is_valid:
+                raise ValueError("invalid coverage union")
         except Exception:
             out[k] = shapely.union_all(gs)
             fallbacks += 1
     if fallbacks:
         log(f"dissolve: {fallbacks} groups needed a slow (non-coverage) union")
+    return out
+
+
+def load_official(mod, raw_dir, proj, wanted):
+    """Finest-level polygons from the country module (official source), in the
+    working projection, restricted to the codes in units.csv (sample builds)."""
+    out, dups, batch_codes, batch_geoms = {}, 0, [], []
+
+    def flush():
+        nonlocal dups
+        geoms = proj.to_local(np.array(batch_geoms, dtype=object))
+        bad = ~shapely.is_valid(geoms)
+        if bad.any():
+            geoms[bad] = shapely.make_valid(geoms[bad])
+        for code, g in zip(batch_codes, geoms):
+            polys = [p for p in shapely.get_parts(g) if p.geom_type == "Polygon"]
+            if not polys:
+                continue
+            g = shapely.multipolygons(polys) if len(polys) > 1 else polys[0]
+            if code in out:
+                out[code] = shapely.union_all([out[code], g])
+                dups += 1
+            else:
+                out[code] = g
+        batch_codes.clear(); batch_geoms.clear()
+
+    for raw, g in mod.read_polygons(raw_dir):
+        p = mod.parse(raw)
+        if p is None or p["code"] not in wanted:
+            continue
+        batch_codes.append(p["code"]); batch_geoms.append(g)
+        if len(batch_codes) >= 20000:
+            flush()
+            log(f"official polygons: {len(out)} read")
+    flush()
+    if dups:
+        log(f"official polygons: {dups} codes appeared more than once and were unioned")
     return out
 
 
@@ -242,7 +288,9 @@ class Clipper:
 # ----------------------------------------------------------------------------
 # 4. interior boundary lines
 # ----------------------------------------------------------------------------
-def interior_lines(polys, clipper):
+def interior_lines(polys, clipper=None):
+    """Segments shared by two or more polygons of one level, clipped to land when
+    a clipper is given (derived polygons extend into the sea), merged into lines."""
     segs = []
     for g in polys.values():
         for ring in shapely.get_rings(shapely.get_parts(g)):
@@ -256,10 +304,11 @@ def interior_lines(polys, clipper):
     if len(shared) == 0:
         return []
     lines = shapely.linestrings(shared.reshape(-1, 2, 2))
-    li, pi = clipper.tree.query(lines, predicate="intersects")
-    clipped = shapely.intersection(lines[li], clipper.pieces[pi])
-    clipped = clipped[~shapely.is_empty(clipped)]
-    parts = [g for g in shapely.get_parts(clipped) if g.geom_type == "LineString"]
+    if clipper is not None:
+        li, pi = clipper.tree.query(lines, predicate="intersects")
+        lines = shapely.intersection(lines[li], clipper.pieces[pi])
+        lines = lines[~shapely.is_empty(lines)]
+    parts = [g for g in shapely.get_parts(lines) if g.geom_type == "LineString"]
     merged = shapely.line_merge(shapely.multilinestrings(parts)) if parts else shapely.MultiLineString()
     return [g for g in shapely.get_parts(merged) if g.length > 0]
 
@@ -319,25 +368,12 @@ def main():
     level_ids = [l["id"] for l in mod.LEVELS]  # coarse -> fine
     finest = level_ids[-1]
 
+    official = hasattr(mod, "read_polygons")
     codes, lon, lat = load_units(a.units, level_ids)
     n = len(lon)
     log(f"loaded {n} points")
     proj = Proj(lon, lat)
-    x, y = proj.fwd.transform(lon, lat)
-    xy = np.column_stack([x, y])
-    uxy, inverse, cells = voronoi_cells(xy)
-
-    # cell -> finest code: the code with most points at that location wins
-    votes = defaultdict(lambda: defaultdict(int))
     fine = codes[finest]
-    for i in range(n):
-        votes[inverse[i]][fine[i]] += 1
-    cell_code = np.empty(len(uxy), dtype=object)
-    for ci, v in votes.items():
-        cell_code[ci] = max(v.items(), key=lambda kv: (kv[1], kv[0]))[0]
-    no_territory = sorted(set(fine) - set(cell_code))
-    if no_territory:
-        log(f"{len(no_territory)} {finest} codes have no location of their own (all points shared with another code); no polygon")
 
     # parents and counts per level
     parent = {}  # level_id -> {code: parent code}
@@ -348,43 +384,71 @@ def main():
             if j > 0:
                 parent.setdefault(l, {})[codes[l][i]] = codes[level_ids[j - 1]][i]
 
-    polys = {finest: dissolve(cells, cell_code)}
+    if official:
+        log("official polygons: reading from the country module (no Voronoi, no clipping)")
+        fine_polys = load_official(mod, a.raw_dir, proj, set(fine))
+        no_territory = sorted(set(fine) - set(fine_polys))
+        if no_territory:
+            log(f"{len(no_territory)} {finest} codes have no polygon in the source")
+        polys = {finest: fine_polys}
+        uxy, outside = np.empty((0, 2)), []
+    else:
+        x, y = proj.fwd.transform(lon, lat)
+        xy = np.column_stack([x, y])
+        uxy, inverse, cells = voronoi_cells(xy)
+        # cell -> finest code: the code with most points at that location wins
+        votes = defaultdict(lambda: defaultdict(int))
+        for i in range(n):
+            votes[inverse[i]][fine[i]] += 1
+        cell_code = np.empty(len(uxy), dtype=object)
+        for ci, v in votes.items():
+            cell_code[ci] = max(v.items(), key=lambda kv: (kv[1], kv[0]))[0]
+        no_territory = sorted(set(fine) - set(cell_code))
+        if no_territory:
+            log(f"{len(no_territory)} {finest} codes have no location of their own (all points shared with another code); no polygon")
+        polys = {finest: dissolve(cells, cell_code)}
     log(f"{len(polys[finest])} {finest}")
     for j in range(len(level_ids) - 2, -1, -1):
         child, lvl = level_ids[j + 1], level_ids[j]
-        polys[lvl] = dissolve(list(polys[child].values()), [parent[child][c] for c in polys[child]])
+        polys[lvl] = dissolve(list(polys[child].values()), [parent[child][c] for c in polys[child]], check=official)
         log(f"{len(polys[lvl])} {lvl}")
 
-    mask_path = mod.mask(a.raw_dir) if hasattr(mod, "mask") else None
-    if mask_path:
+    mask_path = mod.mask(a.raw_dir) if hasattr(mod, "mask") and not official else None
+    if official:
+        clipper, mask_source = None, "none (official polygons)"
+    elif mask_path:
         log(f"mask: {mask_path}")
         mask = load_mask(mask_path, proj, uxy, a.mask_cache)
         mask_source = "country"
     else:
         log("no mask from the country module: building occupancy-grid mask (derived, blocky edges)")
         mask, mask_source = grid_mask(uxy), "grid"
-    pieces = subdivide(mask)
-    tree = STRtree(pieces)
-    hit, _ = tree.query(shapely.points(uxy), predicate="intersects")
-    outside = np.setdiff1d(np.arange(len(uxy)), hit)
-    if len(outside):
-        log(f"{len(outside)} point locations fall outside the mask; adding 250 m buffers")
-        pieces = np.concatenate([pieces, shapely.buffer(shapely.points(uxy[outside]), 250, quad_segs=4)])
-    clipper = Clipper(pieces)
-    log(f"mask ready ({len(pieces)} pieces)")
+    if not official:
+        pieces = subdivide(mask)
+        tree = STRtree(pieces)
+        hit, _ = tree.query(shapely.points(uxy), predicate="intersects")
+        outside = np.setdiff1d(np.arange(len(uxy)), hit)
+        if len(outside):
+            log(f"{len(outside)} point locations fall outside the mask; adding 250 m buffers")
+            pieces = np.concatenate([pieces, shapely.buffer(shapely.points(uxy[outside]), 250, quad_segs=4)])
+        clipper = Clipper(pieces)
+        log(f"mask ready ({len(pieces)} pieces)")
 
     names = mod.names(a.raw_dir) if hasattr(mod, "names") else {}
     lost = {}
     for lvl in reversed(level_ids):
         write_lines(a.out, lvl, interior_lines(polys[lvl], clipper), proj)
-        clipped = {k: clipper.clip(g) for k, g in polys[lvl].items()}
-        lost[lvl] = [k for k, g in clipped.items() if g is None]
-        log(f"clipped {lvl} ({len(lost[lvl])} lost)")
-        write_level(a.out, lvl, clipped, proj, counts[lvl], parent.get(lvl), names if lvl == finest else None)
+        if clipper is None:
+            clipped, lost[lvl] = polys[lvl], []
+        else:
+            clipped = {k: clipper.clip(g) for k, g in polys[lvl].items()}
+            lost[lvl] = [k for k, g in clipped.items() if g is None]
+            log(f"clipped {lvl} ({len(lost[lvl])} lost)")
+        write_level(a.out, lvl, clipped, proj, counts[lvl], parent.get(lvl), names.get(lvl))
 
     if a.report:
         with open(a.report, "w") as f:
-            json.dump({"country": a.country, "points": n, "distinct_locations": int(len(uxy)),
+            json.dump({"country": a.country, "official": official, "points": n, "distinct_locations": int(len(uxy)),
                        "polygons": {l: len(polys[l]) for l in level_ids}, "mask": mask_source,
                        "points_outside_mask": int(len(outside)), "lost": lost,
                        "codes_without_territory": no_territory, "seconds": round(time.time() - T0, 1)}, f, indent=1)

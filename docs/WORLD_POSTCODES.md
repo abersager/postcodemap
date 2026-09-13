@@ -21,7 +21,7 @@ because the licences differ and must not be mixed.
 
 | Country | System | Levels for the app | Open source (form) | Licence |
 |---|---|---|---|---|
-| Netherlands | 1234 AB (PC6) | PC2, PC4, PC5, PC6 | CBS/Kadaster PC6 polygons on PDOK; BAG address points | Verified: CC0 / CC BY 4.0 |
+| Netherlands | 1234 AB (PC6) | PC2, PC4, PC5, PC6 | **Built.** CBS "Kerncijfers per postcode" PC6 GeoPackage (466 k polygons, geometry by Esri Nederland from BAG); GeoNames for PC4 place names | Verified: CC BY 4.0 (attribution of CBS and Esri Nederland required on maps) |
 | Denmark | 4 digits | 1, 2, 4 digits | DAWA/DAGI postnumre polygons; address points | Verified: CC BY 4.0 |
 | Norway | 4 digits | 1, 2, 4 digits | Kartverket "Postnummerområder" polygons (boundaries from Posten) | Verified: CC BY 4.0 |
 | Finland | 5 digits | 2, 3, 5 digits | Statistics Finland Paavo postal-code area polygons | Verified: Statistics Finland open data terms (CC BY 4.0) |

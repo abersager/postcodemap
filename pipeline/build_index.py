@@ -4,13 +4,15 @@
     python pipeline/build_index.py <cc> <polygons_dir> <units.csv> --out <dir>
 
   <out>/meta.json      country description consumed by the app (levels, thresholds,
-                       bounds, attribution, point level, shard level)
+                       bounds, attribution, point level, shard level, density level)
   <out>/index.json     {"<level id>": {code: [minx, miny, maxx, maxy, units, km2, name?]}, ...}
-  <out>/units.bin      for countries with a point level: the per-SHARD_LEVEL point
-                       lists, each a gzipped JSON {"<point code>": [lon, lat], ...},
-                       concatenated; index.json["shards"] maps shard code ->
-                       [offset, length] so the app fetches one slice with a
-                       range request (one file instead of thousands)
+                       for every polygon level except the SHARDED_LEVELS
+  <out>/units.bin      one gzipped JSON slice per SHARD_LEVEL code, concatenated;
+                       index.json["shards"] maps shard code -> [offset, length] so
+                       the app fetches one slice with a range request. A slice is
+                       {"<level id>": {code: value}} where value is [lon, lat] for
+                       the point level (GB unit postcodes) or [minx, miny, maxx, maxy]
+                       for a sharded polygon level (NL PC5/PC6)
 """
 import gzip
 import argparse
@@ -51,22 +53,30 @@ def main():
     mod = countries.get(a.country)
     os.makedirs(a.out, exist_ok=True)
     level_ids = [l["id"] for l in mod.LEVELS]
+    sharded = list(getattr(mod, "SHARDED_LEVELS", []) or [])
+    shard_level = mod.SHARD_LEVEL if (mod.POINT_LEVEL or sharded) else None
 
-    index = {l: read_level(os.path.join(a.polygons, f"{l}.geojsonl")) for l in level_ids}
+    tables = {l: read_level(os.path.join(a.polygons, f"{l}.geojsonl")) for l in level_ids}
+    index = {l: tables[l] for l in level_ids if l not in sharded}
     bounds = [180, 90, -180, -90]
-    for row in index[level_ids[0]].values():
+    for row in tables[level_ids[0]].values():
         bounds = [min(bounds[0], row[0]), min(bounds[1], row[1]), max(bounds[2], row[2]), max(bounds[3], row[3])]
 
     added = 0
-    if mod.POINT_LEVEL:
-        shards = defaultdict(dict)
+    shards = defaultdict(lambda: defaultdict(dict))  # shard code -> level id -> code -> value
+    if shard_level:
         by_level = {l: defaultdict(list) for l in level_ids}
         with open(a.units, newline="") as f:
             for row in csv.DictReader(f):
                 pt = [round(float(row["lon"]), 5), round(float(row["lat"]), 5)]
-                shards[row[mod.SHARD_LEVEL]][row["code"]] = pt
+                shard = shards[row[shard_level]]
+                if mod.POINT_LEVEL:
+                    shard[mod.POINT_LEVEL["id"]][row["code"]] = pt
+                for l in sharded:
+                    if row[l] in tables[l]:
+                        shard[l][row[l]] = tables[l][row[l]][:4]
                 for l in level_ids:
-                    if row[l] not in index[l]:
+                    if l not in sharded and row[l] not in index[l]:
                         by_level[l][row[l]].append(pt)
         directory = {}
         with open(os.path.join(a.out, "units.bin"), "wb") as f:
@@ -77,10 +87,12 @@ def main():
         index["shards"] = directory
         # codes without a polygon (all their points shared with another code) stay searchable
         for l in level_ids:
+            if l in sharded:
+                continue
             for code, pts in by_level[l].items():
                 index[l][code] = bbox_of(pts) + [len(pts), 0]
                 added += 1
-        print(f"build_index[{a.country}]: {len(shards)} point shards packed into units.bin ({os.path.getsize(os.path.join(a.out, 'units.bin')) / 1e6:.1f} MB), {added} polygon-less codes indexed from points", file=sys.stderr)
+        print(f"build_index[{a.country}]: {len(shards)} shards packed into units.bin ({os.path.getsize(os.path.join(a.out, 'units.bin')) / 1e6:.1f} MB), {added} polygon-less codes indexed from points", file=sys.stderr)
 
     with open(os.path.join(a.out, "index.json"), "w") as f:
         json.dump(index, f, separators=(",", ":"), ensure_ascii=False)
@@ -88,16 +100,18 @@ def main():
     meta = {
         "code": mod.CODE, "name": mod.NAME,
         "levels": [{"id": l["id"], "name": l["name"], "threshold": l["threshold"]} for l in mod.LEVELS],
-        "pointLevel": mod.POINT_LEVEL, "shardLevel": mod.SHARD_LEVEL,
+        "pointLevel": mod.POINT_LEVEL, "shardLevel": shard_level, "shardedLevels": sharded,
+        "densityLevel": getattr(mod, "DENSITY_LEVEL", None) or level_ids[-1],
         "pointNoun": getattr(mod, "POINT_NOUN", (mod.POINT_LEVEL or {}).get("noun", "points")),
         "bounds": [round(b, 4) for b in bounds],
         "attribution": mod.ATTRIBUTION, "licence": mod.LICENCE,
-        "counts": {l: len(index[l]) for l in level_ids},
-        "hasPoints": bool(mod.POINT_LEVEL),
+        "official": hasattr(mod, "read_polygons"),
+        "counts": {l: len(tables[l]) for l in level_ids},
+        "hasPoints": bool(mod.POINT_LEVEL), "hasShards": bool(shard_level),
     }
     with open(os.path.join(a.out, "meta.json"), "w") as f:
         json.dump(meta, f, indent=1, ensure_ascii=False)
-    print(f"build_index[{a.country}]: {sum(len(index[l]) for l in level_ids)} codes, bounds {meta['bounds']}", file=sys.stderr)
+    print(f"build_index[{a.country}]: {sum(len(tables[l]) for l in level_ids)} codes, bounds {meta['bounds']}", file=sys.stderr)
 
 
 if __name__ == "__main__":

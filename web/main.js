@@ -71,6 +71,8 @@ map.on("load", () => {
 
 function addCountry(c) {
   const polys = c.levels.filter((l) => l.kind === "polygon");
+  // derived polygons come with `<id>_lines` layers that leave out the coast; official ones are outlined as they are
+  const outline = (lvl) => (c.meta.official ? lvl.id : `${lvl.id}_lines`);
   map.addSource(`${c.cc}-boundaries`, {
     type: "vector", url: "pmtiles://" + c.base + "boundaries.pmtiles",
     promoteId: Object.fromEntries(polys.map((l) => [l.id, "code"])), attribution: c.meta.attribution,
@@ -83,7 +85,7 @@ function addCountry(c) {
       const s = CONFIG.levelStyles[Math.min(i, CONFIG.levelStyles.length - 1)];
       map.addLayer({ id: layerId(c, i, "fill"), type: "fill", source: `${c.cc}-boundaries`, "source-layer": lvl.id, minzoom, maxzoom,
         paint: { "fill-color": s.color, "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], CONFIG.hoverFillOpacity, CONFIG.fillOpacity] } });
-      map.addLayer({ id: layerId(c, i, "line"), type: "line", source: `${c.cc}-boundaries`, "source-layer": `${lvl.id}_lines`, minzoom, maxzoom,
+      map.addLayer({ id: layerId(c, i, "line"), type: "line", source: `${c.cc}-boundaries`, "source-layer": outline(lvl), minzoom, maxzoom,
         layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": s.color, "line-width": s.lineWidth, "line-opacity": 0.9 } });
       map.addLayer({ id: layerId(c, i, "label"), type: "symbol", source: `${c.cc}-boundaries`, "source-layer": `${lvl.id}_labels`, minzoom, maxzoom,
         layout: { "text-field": ["get", "code"], "text-font": CONFIG.fonts, "text-size": s.textSize },
@@ -91,7 +93,7 @@ function addCountry(c) {
     } else {
       const u = CONFIG.pointStyle;
       const finest = polys[polys.length - 1];
-      map.addLayer({ id: layerId(c, i, "context"), type: "line", source: `${c.cc}-boundaries`, "source-layer": `${finest.id}_lines`, minzoom,
+      map.addLayer({ id: layerId(c, i, "context"), type: "line", source: `${c.cc}-boundaries`, "source-layer": outline(finest), minzoom,
         paint: { "line-color": CONFIG.levelStyles[Math.min(polys.length - 1, 3)].color, "line-width": 1, "line-opacity": 0.5, "line-dasharray": [3, 2] } });
       map.addLayer({ id: layerId(c, i, "circle"), type: "circle", source: `${c.cc}-points`, "source-layer": "points", minzoom,
         paint: { "circle-radius": ["case", ["boolean", ["feature-state", "hover"], false], u.circleRadius + 3, u.circleRadius], "circle-color": u.color, "circle-stroke-color": "#fff", "circle-stroke-width": 1.2 } });
@@ -137,7 +139,8 @@ function updateActiveCountry() {
 function densityAtCentre(c) {
   if (!c.index) return null;
   const finest = c.levels.filter((l) => l.kind === "polygon").slice(-1)[0];
-  const table = c.index[finest.id];
+  const table = c.index[c.meta.densityLevel || finest.id];
+  if (!table) return null;
   const { lng, lat } = map.getCenter();
   let best = null;
   for (const code in table) {
@@ -174,7 +177,7 @@ function setHover(next) {
   hovered = next;
   if (hovered) map.setFeatureState(hovered, { hover: true });
 }
-const describe = (p) => (p.name ? `${p.code} ${p.name}` : p.code) + (p.units ? ` · ${p.units.toLocaleString()}` : "");
+const describe = (p) => (p.name ? `${p.code} ${p.name}` : p.code) + (p.units > 1 ? ` · ${p.units.toLocaleString()}` : "");
 
 function wireInteraction() {
   for (const c of COUNTRIES) c.levels.forEach((lvl, i) => {
@@ -250,8 +253,10 @@ const msg = document.getElementById("msg");
 const indexReady = Promise.all(COUNTRIES.map((c) => fetch(c.base + "index.json").then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
   .then((j) => { c.index = j; if (c === active && map.loaded()) updateDensityShift(); }).catch((e) => console.warn(`${c.cc}: search index unavailable:`, e))));
 
-// Point lists live in one file per country (units.bin): gzipped JSON slices
-// addressed by index.json["shards"], fetched with a range request.
+// Codes too numerous for index.json (GB unit postcodes, NL PC5/PC6) live in
+// one file per country (units.bin): gzipped JSON slices {level: {code: value}}
+// addressed by index.json["shards"], fetched with a range request. A value is
+// [lon, lat] for a point level or [minx, miny, maxx, maxy] for a polygon level.
 const shardCache = new Map();
 async function unitsOf(c, shard) {
   const key = `${c.cc}/${shard}`;
@@ -269,7 +274,7 @@ async function unitsOf(c, shard) {
   })());
   return shardCache.get(key);
 }
-const bboxOfPoints = (pts) => pts.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]);
+const bboxOfBoxes = (boxes) => boxes.reduce((b, x) => [Math.min(b[0], x[0]), Math.min(b[1], x[1]), Math.max(b[2], x[2]), Math.max(b[3], x[3])], [Infinity, Infinity, -Infinity, -Infinity]);
 const polyLevels = (c) => c.levels.filter((l) => l.kind === "polygon");
 
 // Resolve a fragment to { c, level, code, bbox } or { c, level: point, code, point } etc.
@@ -281,19 +286,29 @@ async function resolve(raw) {
   for (const c of order) {
     if (!c.index) continue;
     for (const lvl of [...polyLevels(c)].reverse()) {
+      if (!c.index[lvl.id]) continue; // sharded level: searched in step 2
       const hit = Object.keys(c.index[lvl.id]).find((code) => norm(code) === q);
       if (hit) return { c, level: lvl, code: hit, bbox: c.index[lvl.id][hit].slice(0, 4) };
     }
   }
-  // 2. point codes: the longest shard code that prefixes the query names the shard file
+  // 2. sharded codes: the longest shard code that prefixes the query names the slice;
+  //    an exact match at any level wins, else the finest level with prefix matches
   for (const c of order) {
-    if (!c.index || !c.meta.hasPoints) continue;
+    if (!c.index || !(c.meta.hasShards ?? c.meta.hasPoints)) continue;
     const shards = Object.keys(c.index[c.meta.shardLevel]).filter((code) => q.startsWith(norm(code))).sort((a, b) => b.length - a.length);
     for (const shard of shards.slice(0, 2)) {
-      const units = await unitsOf(c, shard);
-      const hits = Object.entries(units).filter(([code]) => norm(code).startsWith(q));
-      if (hits.length === 1) return { c, level: c.levels[c.levels.length - 1], code: hits[0][0], point: hits[0][1] };
-      if (hits.length > 1) return { c, level: c.levels[c.levels.length - 1], code: "", bbox: bboxOfPoints(hits.map((h) => h[1])), matches: hits.length };
+      const slice = await unitsOf(c, shard);
+      const levels = [...c.levels].reverse().filter((l) => slice[l.id]);
+      const hit = (level, code, v) => (v.length === 2 ? { c, level, code, point: v } : { c, level, code, bbox: v });
+      for (const level of levels) {
+        const exact = Object.keys(slice[level.id]).find((code) => norm(code) === q);
+        if (exact) return hit(level, exact, slice[level.id][exact]);
+      }
+      for (const level of levels) {
+        const hits = Object.entries(slice[level.id]).filter(([code]) => norm(code).startsWith(q));
+        if (hits.length === 1) return hit(level, hits[0][0], hits[0][1]);
+        if (hits.length > 1) return { c, level, code: "", bbox: bboxOfBoxes(hits.map(([, v]) => (v.length === 2 ? [v[0], v[1], v[0], v[1]] : v))), matches: hits.length };
+      }
     }
   }
   // 3. prefix of polygon codes: fit them all at the most specific matching level

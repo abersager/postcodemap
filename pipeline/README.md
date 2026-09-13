@@ -13,7 +13,7 @@ pipeline/countries/<cc>.py ─ download() ──► data/<cc>/raw/
   <cc>.mask() ──► build_polygons.py ──► data/<cc>/build/polygons/<level>.geojsonl (+ _lines, _labels)
                                    │
                     build_tiles.py ──► web/public/countries/<cc>/boundaries.pmtiles (+ points.pmtiles)
-                    build_index.py ──► web/public/countries/<cc>/index.json, units/<shard>.json, meta.json
+                    build_index.py ──► web/public/countries/<cc>/index.json, units.bin, meta.json
 ```
 
 ## Country modules
@@ -23,12 +23,16 @@ documented in `countries/__init__.py`: its levels (coarse to fine) with default
 zoom thresholds, an optional point level, attribution, `download()`,
 `read_units()` (one point per unit postcode or address, with its finest code),
 `parse()` (splits a code into the levels) and optionally `names()` and `mask()`
-(land polygons for clipping). The generic scripts never contain country logic.
+(land polygons for clipping). A country with official polygons implements
+`read_polygons()` instead of relying on the Voronoi derivation; its
+`read_units()` then yields one representative point per finest code. The
+generic scripts never contain country logic.
 
-| Country | Module | Points | Levels | Mask |
+| Country | Module | Source | Levels | Polygons |
 |---|---|---|---|---|
-| Great Britain | `gb.py` | OS Code-Point Open unit postcodes (1.7 M); ONSPD or a CSV via `SOURCE=` | area, district, sector + unit points | ONS country boundaries (BGC) |
-| Austria | `at.py` | BEV Adressregister addresses (2.5 M), each with its PLZ | zone (1 digit), region (2 digits), PLZ | Statistik Austria municipalities |
+| Great Britain | `gb.py` | OS Code-Point Open unit postcodes (1.7 M); ONSPD or a CSV via `SOURCE=` | area, district, sector + unit points | derived, clipped to ONS country boundaries (BGC) |
+| Austria | `at.py` | BEV Adressregister addresses (2.5 M), each with its PLZ | zone (1 digit), region (2 digits), PLZ | derived, clipped to Statistik Austria municipalities |
+| Netherlands | `nl.py` | CBS "Kerncijfers per postcode" PC6 GeoPackage (466 k polygons); GeoNames for PC4 names | pc2, pc4, pc5, pc6 | official PC6, coarser levels dissolved |
 
 ## Tools
 
@@ -69,6 +73,12 @@ codes, dedupes unit postcodes (addresses are not deduped) and writes
 
 ### 2. `build_polygons.py`
 
+For a country with `read_polygons()` (NL) the finest level is read as given,
+projected to the local transverse Mercator, dissolved into each coarser level
+with coverage unions (checked, with a proper union as fallback where the
+source overlaps itself) and written without clipping; boundary lines are the
+edges shared by neighbouring polygons. Otherwise:
+
 1. Projects every point to a local transverse Mercator centred on the data and
    computes the Voronoi diagram of all distinct locations (scipy/Qhull; 1.7 M
    points take ~40 s). Sixteen sentinel points far outside keep every real
@@ -108,12 +118,16 @@ codes, dedupes unit postcodes (addresses are not deduped) and writes
 One tippecanoe run per layer, then `tile-join` into `boundaries.pmtiles` and,
 for countries with a point level, `points.pmtiles`:
 
-- `boundaries.pmtiles`: `areas` (z0–10), `districts` (z6–12), `sectors`
-  (z9–12) polygons, the matching `*_lines` boundary layers and `*_labels`
-  point layers. `--detect-shared-borders` keeps neighbouring polygons
-  consistent when simplified. MapLibre overzooms z12 tiles for closer views;
-  boundary lines are straight Voronoi edges, so that costs nothing visible.
-- `units.pmtiles`: every `units` point at z13, overzoomed beyond.
+- `boundaries.pmtiles`: one polygon layer per level (GB: `area` z0–10,
+  `district` z6–12, `sector` z9–12) and its `*_labels` point layer (code
+  only). Derived levels also get a `*_lines` layer with the boundaries
+  between polygons but not the coast; official polygons (NL) are outlined by
+  the app directly, which halves their archive. A level whose threshold is
+  above z12 (NL `pc6` at 13) is tiled at z12 only. `--detect-shared-borders`
+  keeps neighbouring polygons consistent when simplified. MapLibre overzooms
+  z12 tiles for closer views; boundary lines are straight Voronoi edges or
+  official outlines, so that costs little visible.
+- `points.pmtiles`: every unit point at z13, overzoomed beyond.
 
 Zoom ranges are kept tight on purpose: GitHub Pages' CDN fetches a whole
 file on a cold range request and caches it for only ten minutes, so archive
@@ -124,11 +138,15 @@ size directly sets how long the first visitor waits.
 Static search index: `index.json` maps every polygon code to
 `[minx, miny, maxx, maxy, units, km2, name?]` (the app also uses units/km2 to
 adapt the zoom thresholds to postcode density); for countries with a point
-level, `units.bin` holds one gzipped JSON of `{code: [lon, lat]}` per
-`SHARD_LEVEL` code, concatenated, with `index.json["shards"]` giving each
-slice's byte offset and length, so a unit search is one range request; `units/<DISTRICT>.json` maps each unit in that district to
-`[lon, lat]`. The app loads a district file on demand when a unit-level
-search is made.
+level (GB) or with `SHARDED_LEVELS` (NL PC5/PC6, too many for `index.json`),
+`units.bin` holds one gzipped JSON slice per `SHARD_LEVEL` code, concatenated,
+with `index.json["shards"]` giving each slice's byte offset and length, so a
+search below the indexed levels is one range request. A slice is
+`{"<level id>": {code: value}}` with `[lon, lat]` for points and
+`[minx, miny, maxx, maxy]` for sharded polygons. `meta.json` also names the
+`densityLevel` whose units/km² drives the app's density shift (the finest
+polygon level by default; PC4 for NL, where the finest polygons each hold
+one code).
 
 ## Timings (4 cores, 15 GB RAM, October 2017 test extract of 1.74 M postcodes)
 
@@ -142,14 +160,16 @@ search is made.
 Peak memory is about 4 GB during the Voronoi step. Preparing the ONS coastline
 takes about 30 s the first time and is cached afterwards.
 
-## Alternative polygon inputs
+## Official polygon inputs
 
-The app only needs `areas/districts/sectors.geojsonl` with the properties
-listed above. If you prefer a third-party polygon set (for example the
-doogal.co.uk district and sector KML, which is built by the same Voronoi
-method), convert it to those files with `ogr2ogr -f GeoJSONSeq`, add the
-properties, and run `make tiles index`. Note licensing: such files inherit
-the OS/Royal Mail terms and add the publisher's own.
+A country whose postal operator or statistics office publishes polygons
+implements `read_polygons(raw_dir)` in its module, yielding
+`(raw_code, shapely geometry in WGS84)` for every finest-level polygon
+(`countries/nl.py` reads them straight out of a GeoPackage with sqlite3).
+`build_polygons.py` then skips the Voronoi and clipping steps entirely. For
+GB a third-party polygon set (for example the doogal.co.uk district and
+sector KML, itself Voronoi-derived) could be wired in the same way, but it
+would inherit the OS/Royal Mail terms plus the publisher's own.
 
 ## Refreshing after a Royal Mail update
 

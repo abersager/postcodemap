@@ -46,6 +46,7 @@ jobs:
         run: |
           make COUNTRY=gb
           make COUNTRY=at
+          make COUNTRY=nl
       - name: Version
         id: v
         run: echo "ver=$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
