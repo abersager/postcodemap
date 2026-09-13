@@ -87,40 +87,41 @@ Also there: basemap style URL, colours by level depth, label sizes and the
 keep-alive interval. Each country's default thresholds and attribution live
 in its module and reach the app through `countries/<cc>/meta.json`.
 
-## Static deployment
+## Deployment
 
-`npm run build` writes a self-contained site to `dist/` (relative paths, so
-it works at any sub-path). Copy it to any static host that supports HTTP
-range requests, which includes GitHub Pages, Netlify, Cloudflare Pages, S3 or
-R2 behind a CDN, and nginx/Apache.
+The site is static: `npm run build` writes `dist/` with relative paths.
 
-Sizes to expect from a full GB build:
+**Production: Cloudflare (free).** https://postcodemap.net is a Cloudflare
+Pages project; the data lives in an R2 bucket behind the custom domain
+`data.postcodemap.net`, so tiles are served from Cloudflare's cache with free
+egress. `.github/workflows/cloudflare.yml` (manual dispatch) builds every
+country, uploads `dist/countries` to R2 under `v/<date>-<sha>/` with
+immutable cache headers, and deploys the app with `countryBase` pointing at
+that prefix; versioned prefixes mean no cache purges and no broken clients
+mid-deploy. `scripts/cloudflare_setup.py` created the bucket, its CORS (GET
+and Range from any origin), the custom domain, a cache-everything rule with
+a one-year edge TTL (needed because `.pmtiles` is not a cacheable extension
+by default), the Pages project and the apex DNS record; it is idempotent and
+runs when the workflow's `setup` input is on. Secrets: `CLOUDFLARE_API_TOKEN`
+(permissions listed in the script) and `CLOUDFLARE_ACCOUNT_ID`.
+
+Sizes to expect from a full build:
 
 | File                                   | Size    |
 |----------------------------------------|---------|
 | `countries/gb/boundaries.pmtiles`      | ~30 MB  |
 | `countries/gb/points.pmtiles`          | ~22 MB  |
 | `countries/gb/` search index           | ~60 MB across ~3,000 small JSON files |
-| `countries/at/boundaries.pmtiles`      | ~10 MB  |
+| `countries/at/boundaries.pmtiles`      | ~7 MB   |
 | app bundle                             | < 1 MB  |
 
-Tiles are fetched in small ranges on demand, so visitors never download the
-whole archive. If your host has a per-file size limit, or for the fastest
-loads (see "Performance" below), host the two `.pmtiles` files on object
-storage with a long cache TTL (Cloudflare R2, S3 + CloudFront) and point
-`tiles.boundaries` / `tiles.units` in `web/config.js` at their absolute URLs.
+Well inside R2's free tier (10 GB, 10 M reads a month counted only on cache
+misses). Cloudflare Pages itself caps files at 25 MiB, which is why the
+archives live in R2 and not with the app.
 
-An optional GitHub Actions workflow,
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml), builds the data
-from the live sources and deploys `dist/` to GitHub Pages. It runs on manual
-dispatch only, so a refresh after a quarterly Royal Mail update is:
-
-```bash
-gh workflow run pages.yml          # needs Pages enabled with source "GitHub Actions"
-```
-
-The run takes about 15 minutes (tippecanoe is compiled from source on the
-runner). The live site is at https://abersager.github.io/postcodemap/.
+**Fallback: GitHub Pages.** `.github/workflows/pages.yml` still deploys the
+whole site, data included, to https://abersager.github.io/postcodemap/. It
+works, with the two performance caveats below.
 
 ## Performance
 
