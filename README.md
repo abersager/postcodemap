@@ -119,9 +119,11 @@ Well inside R2's free tier (10 GB, 10 M reads a month counted only on cache
 misses). Cloudflare Pages itself caps files at 25 MiB, which is why the
 archives live in R2 and not with the app.
 
-**Fallback: GitHub Pages.** `.github/workflows/pages.yml` still deploys the
-whole site, data included, to https://abersager.github.io/postcodemap/. It
-works, with the two performance caveats below.
+**GitHub Pages** (https://abersager.github.io/postcodemap/) now only
+redirects to postcodemap.net, keeping the map view in the URL hash;
+`.github/workflows/pages.yml` publishes the two files in `redirect/`. The
+site can still be hosted entirely on GitHub Pages by deploying `dist/` there,
+with the performance caveats below.
 
 ## Performance
 
