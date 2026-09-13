@@ -36,7 +36,7 @@ build_polygons, build_tiles, build_index) only talk to this interface:
                                  coast). Clipped polygons get `_lines` layers so
                                  the map never draws the coast
 
-Countries with official polygons (NL, NO) add:
+Countries with official polygons (NL, NO, DE) add:
 
     read_polygons(raw_dir) -> iter  yields (raw_code, shapely geometry in WGS84) for
                                     every finest-level polygon; build_polygons.py then
@@ -46,7 +46,9 @@ Countries with official polygons (NL, NO) add:
                      their codes and bounding boxes go into units.bin, one gzipped slice
                      per SHARD_LEVEL code, like GB's unit postcodes
     DENSITY_LEVEL    optional: level whose units/km² drives the app's density shift
-                     (default: the finest polygon level)
+                     (default: the finest polygon level); False when the counts are
+                     not a measure of density (DE, one point per postcode and no
+                     addresses), which turns the readout and the shift off
 """
 import importlib
 

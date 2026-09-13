@@ -48,7 +48,7 @@ them derived, exactly as for GB.
 
 | Country | What exists | Problem |
 |---|---|---|
-| Germany | No official open PLZ data (Deutsche Post sells it; BKG redistributes only to public bodies). Complete PLZ polygons exist in OpenStreetMap, redistributed by suche-postleitzahl.org and yetzt/postleitzahlen. | ODbL share-alike. Usable as a *separate* ODbL-licensed country dataset with OSM attribution, never merged with OGL/CC BY data. |
+| Germany | **Built** from OpenStreetMap. No official open PLZ data (Deutsche Post sells it; BKG redistributes only to public bodies; house coordinates are open in a few Länder only, so polygons cannot be derived nationwide). Complete PLZ polygons exist in OpenStreetMap, taken from the yetzt/postleitzahlen release (suche-postleitzahl.org also redistributes them). | ODbL share-alike: kept as a *separate* ODbL-licensed country dataset with OSM attribution, never merged with OGL/CC BY data. No address counts, so no density shift. |
 | Poland | Poczta Polska PNA list is open (dane.gov.pl) but has no coordinates; GUGiK PRG address points are open but the PNA join is by locality/street. | Needs a join pipeline; expect gaps. |
 | Canada | Statistics Canada FSA (3-character) boundaries are open. | Full 6-character codes are Canada Post copyright; StatCan's PCCF is excluded from the open licence. Two levels only. |
 | Portugal | CTT provides the full list (~300k entries) after registration; geocoding via OpenAddresses/OSM. | Terms of use unclear, no explicit open licence. |
@@ -107,7 +107,7 @@ them derived, exactly as for GB.
    with the pipeline as it stands.
 3. United States (ZCTA) and Mexico (SEPOMEX polygons): large but simple.
 4. Japan, South Korea, Singapore: workable, more parsing effort.
-5. Germany as a clearly labelled ODbL dataset from OpenStreetMap.
+5. Germany as a clearly labelled ODbL dataset from OpenStreetMap (built).
 6. Everything else via GeoNames, labelled approximate, area/district only.
 
 Countries in Tier 2's lower half (Canada beyond FSA, Sweden, Ireland, Italy,

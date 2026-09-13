@@ -26,10 +26,12 @@ zoom thresholds, an optional point level, attribution, `download()`,
 (land polygons for clipping). A country with official polygons implements
 `read_polygons()` instead of relying on the Voronoi derivation; its
 `read_units()` then yields either one representative point per finest code
-(NL) or the country's addresses (NO, `POINT_NOUN = "addresses"`), which give
-the counts. If it also provides `mask()`, the official polygons are clipped
-to it (NO, whose polygons run out to sea). The generic scripts never contain
-country logic.
+(NL, DE) or the country's addresses (NO, `POINT_NOUN = "addresses"`), which
+give the counts. If it also provides `mask()`, the official polygons are
+clipped to it (NO, whose polygons run out to sea). A country whose counts
+say nothing about density (DE: one point per postcode, no addresses) sets
+`DENSITY_LEVEL = False` and the app shows no density and applies no shift
+there. The generic scripts never contain country logic.
 
 | Country | Module | Source | Levels | Polygons |
 |---|---|---|---|---|
@@ -37,6 +39,7 @@ country logic.
 | Austria | `at.py` | BEV Adressregister addresses (2.5 M), each with its PLZ | zone (1 digit), region (2 digits), PLZ | derived, clipped to Statistik Austria municipalities |
 | Netherlands | `nl.py` | CBS "Kerncijfers per postcode" PC6 GeoPackage (466 k polygons); GeoNames for PC4 names | pc2, pc4, pc5, pc6 | official PC6, coarser levels dissolved |
 | Norway | `no.py` | Kartverket Postnummerområder GeoJSON (3.4 k polygons, names included); Matrikkelen addresses CSV (2.6 M); N500 Kartdata GML for the land mask | zone, region, postnr | official, clipped to N500 land areas (everything but `Havflate`), coarser levels dissolved |
+| Germany | `de.py` | OpenStreetMap `boundary=postal_code` relations as released by yetzt/postleitzahlen (brotli GeoJSON, 8.2 k polygons; ODbL); GeoNames for PLZ names | zone, region, area (3 digits), plz | unofficial (community-drawn), coarser levels dissolved; no mask needed |
 
 ## Tools
 
@@ -77,10 +80,10 @@ codes, dedupes unit postcodes (addresses are not deduped) and writes
 
 ### 2. `build_polygons.py`
 
-For a country with `read_polygons()` (NL, NO) the finest level is read as
+For a country with `read_polygons()` (NL, NO, DE) the finest level is read as
 given, projected to the local transverse Mercator and dissolved into each
 coarser level with coverage unions (checked, with a proper union as fallback
-where the source overlaps itself). Without a `mask()` (NL) nothing is
+where the source overlaps itself). Without a `mask()` (NL, DE) nothing is
 clipped; with one (NO) every level is clipped like derived polygons, except
 that polygons entirely outside the mask's extent (Svalbard and Jan Mayen,
 beyond N500) are kept whole. Polygons whose code has no address keep a count
@@ -175,7 +178,9 @@ A country whose postal operator or statistics office publishes polygons
 implements `read_polygons(raw_dir)` in its module, yielding
 `(raw_code, shapely geometry in WGS84)` for every finest-level polygon
 (`countries/nl.py` reads them straight out of a GeoPackage with sqlite3,
-`countries/no.py` from GeoJSON). `build_polygons.py` then skips the Voronoi
+`countries/no.py` from GeoJSON, `countries/de.py` streams them one feature
+at a time out of a 500 MB brotli-compressed GeoJSON so the whole document is
+never held as Python objects). `build_polygons.py` then skips the Voronoi
 step, and the clipping step too unless the module provides a `mask()`
 (`no.py` builds one from the N500 land-cover GML with the standard library's
 XML parser: every area type except the sea surface, unioned). For GB a

@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cc: [gb, at, nl, no]   # keep in sync with `countries` in web/config.js
+        cc: [gb, at, nl, no, de]   # keep in sync with `countries` in web/config.js
     steps:
       - uses: actions/checkout@v4
       - name: Cache key from everything that determines this country's output

@@ -11,6 +11,8 @@
 | PC5, PC4, regions (NL) | **Dissolved from official** | Unions of the official PC6 polygons by prefix; exact where the PC6 layer is exact. |
 | Postcodes (NO) | **Official, clipped** | Kartverket "Postnummerområder" (boundaries maintained by Posten Norge, stated accuracy 1.5 km). The source polygons extend over fjords and coastal waters, so they are clipped to the land areas of Kartverket's N500 map data (1:500 000; lakes, rivers and glaciers count as land). Svalbard and Jan Mayen lie outside N500 and keep their sea-covering polygons. The address count per postcode comes from Matrikkelen (road and cadastral addresses). |
 | Regions, zones (NO) | **Dissolved from official** | Unions of the postcode polygons by 2-digit and 1-digit prefix. |
+| PLZ (DE) | **Unofficial** | `boundary=postal_code` relations drawn by OpenStreetMap contributors (8.2 k, complete; extracted by the yetzt/postleitzahlen release named in `pipeline/countries/de.py`). Deutsche Post, which owns the PLZ system, publishes no open boundaries, so there is nothing official to compare against; OSM's are drawn from postcodes observed on the ground and follow municipal boundaries and streets. No address data is open nationwide, so each PLZ counts as one postcode and the app applies no density shift. Place names are GeoNames' (the shortest listed for a PLZ, which is the town or main village). |
+| Areas, regions, zones (DE) | **Dissolved from unofficial** | Unions of the OSM PLZ polygons by 3-, 2- and 1-digit prefix (Deutsche Post's Leitbereich, Leitregion and Leitzone). |
 | Sectors   | **Derived**   | Union of the Voronoi cells of the sector's unit centroids, clipped to the coastline.      |
 | Districts | **Derived**   | Union of derived sectors.                                                                |
 | Areas     | **Derived**   | Union of derived districts.                                                              |
@@ -73,6 +75,15 @@ What "derived" means in practice:
 - **Kartverket** (Norway): Postnummerområder, Matrikkelen addresses and N500
   Kartdata are CC BY 4.0 (Norway's open geodata licence); credit *Kartverket*
   and, for the postcode boundaries, *Posten Norge*.
+- **OpenStreetMap** (Germany): Open Database License 1.0, share-alike. The
+  German tiles and index are a derivative database and are published under
+  ODbL with *© OpenStreetMap contributors*; they are kept in their own files
+  so that the other countries' data stays under its own licences (a
+  collective database). Anyone reusing `countries/de/` must do so under
+  ODbL. There is a residual legal uncertainty that the other countries do
+  not have: Deutsche Post holds rights in the PLZ system and has not
+  licensed OSM's boundaries, which the OSM community mapped independently.
+  **GeoNames** PLZ place names: CC BY 4.0.
 - **This repository's code**: see LICENSE (MIT).
 
 ## Currency and refresh

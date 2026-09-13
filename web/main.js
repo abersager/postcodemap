@@ -65,6 +65,7 @@ map.on("load", () => {
   wireInteraction();
   updateActiveCountry();
   map.on("moveend", updateActiveCountry);
+  map.on("idle", updateActiveCountry);   // tiles for the new view are in by now
   map.on("zoom", updateLegend);
   startTileKeepAlive();
 });
@@ -127,17 +128,24 @@ function startTileKeepAlive() {
 const inBounds = (b, lng, lat) => lng >= b[0] && lng <= b[2] && lat >= b[1] && lat <= b[3];
 function updateActiveCountry() {
   const { lng, lat } = map.getCenter();
-  let next = COUNTRIES.find((c) => inBounds(c.meta.bounds, lng, lat));
-  if (!next) { // nearest by bbox centre
-    next = COUNTRIES.map((c) => ({ c, d: Math.hypot((c.meta.bounds[0] + c.meta.bounds[2]) / 2 - lng, (c.meta.bounds[1] + c.meta.bounds[3]) / 2 - lat) })).sort((a, b) => a.d - b.d)[0].c;
-  }
+  // the polygon rendered under the centre decides (bounding boxes overlap where
+  // countries neighbour each other); before its tiles are in, the smallest
+  // bounding box containing the centre, else the nearest by bbox centre
+  const el = map.getContainer();
+  const fills = COUNTRIES.flatMap((c) => c.levels.map((l, i) => (l.kind === "polygon" ? layerId(c, i, "fill") : null)).filter(Boolean));
+  const hit = map.queryRenderedFeatures([el.clientWidth / 2, el.clientHeight / 2], { layers: fills })[0];
+  const bboxArea = (b) => (b[2] - b[0]) * (b[3] - b[1]);
+  let next = hit && COUNTRIES.find((c) => hit.source === `${c.cc}-boundaries`);
+  if (!next) next = COUNTRIES.filter((c) => inBounds(c.meta.bounds, lng, lat)).sort((a, b) => bboxArea(a.meta.bounds) - bboxArea(b.meta.bounds))[0];
+  if (!next) next = COUNTRIES.map((c) => ({ c, d: Math.hypot((c.meta.bounds[0] + c.meta.bounds[2]) / 2 - lng, (c.meta.bounds[1] + c.meta.bounds[3]) / 2 - lat) })).sort((a, b) => a.d - b.d)[0].c;
+  if (next === active) { updateDensityShift(); return; }
   active = next;
   updateLegend();
   updateDensityShift();
 }
 
 function densityAtCentre(c) {
-  if (!c.index) return null;
+  if (!c.index || c.meta.densityLevel === null) return null;   // null: the country's counts are not a density (DE)
   const finest = c.levels.filter((l) => l.kind === "polygon").slice(-1)[0];
   const table = c.index[c.meta.densityLevel || finest.id];
   if (!table) return null;

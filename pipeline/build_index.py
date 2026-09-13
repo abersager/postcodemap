@@ -101,7 +101,7 @@ def main():
         "code": mod.CODE, "name": mod.NAME,
         "levels": [{"id": l["id"], "name": l["name"], "threshold": l["threshold"]} for l in mod.LEVELS],
         "pointLevel": mod.POINT_LEVEL, "shardLevel": shard_level, "shardedLevels": sharded,
-        "densityLevel": getattr(mod, "DENSITY_LEVEL", None) or level_ids[-1],
+        "densityLevel": None if getattr(mod, "DENSITY_LEVEL", None) is False else (getattr(mod, "DENSITY_LEVEL", None) or level_ids[-1]),
         "pointNoun": getattr(mod, "POINT_NOUN", (mod.POINT_LEVEL or {}).get("noun", "points")),
         "bounds": [round(b, 4) for b in bounds],
         "attribution": mod.ATTRIBUTION, "licence": mod.LICENCE,

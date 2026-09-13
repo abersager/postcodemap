@@ -4,7 +4,7 @@ export default {
   // Every country's tiles are added to the map at once; MapLibre only fetches
   // tiles inside each archive's bounds, so unused countries cost one small
   // header request each.
-  countries: ["gb", "at", "nl", "no"],
+  countries: ["gb", "at", "nl", "no", "de"],
   // Where each country's files are served from (+ "<cc>/meta.json" etc.).
   // Relative for local builds; the Cloudflare deploy sets VITE_COUNTRY_BASE to
   // the versioned R2 prefix, e.g. https://data.postcodemap.net/v/<ver>/countries/
@@ -23,7 +23,8 @@ export default {
   // capped at maxShift and rounded to 0.5, where density is points per km²
   // (unit postcodes for GB, addresses for AT and NO, PC6 codes for NL) of the
   // country's density level (meta.json densityLevel, normally the finest
-  // polygon level) under the map centre. Set enabled: false to disable.
+  // polygon level) under the map centre. A country without such counts (DE)
+  // has densityLevel null and is never shifted. Set enabled: false to disable.
   density: { enabled: true, baseUnitsPerKm2: 40, maxShift: 2 },
 
   // Every N ms, while the page is visible, send a 1-byte range request to the
