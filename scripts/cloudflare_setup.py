@@ -81,7 +81,7 @@ DESC = "postcodemap: cache everything on the data host"
 rule = {"description": DESC, "expression": f'(http.host eq "{DATA_HOST}")', "action": "set_cache_settings",
         "action_parameters": {"cache": True, "edge_ttl": {"mode": "override_origin", "default": 31536000},
                               "browser_ttl": {"mode": "respect_origin"}}}
-entry = cf("GET", f"/zones/{ZONE}/rulesets/phases/http_request_cache_settings/entrypoint", quiet_errors=(10000, 10001, 10002))
+entry = cf("GET", f"/zones/{ZONE}/rulesets/phases/http_request_cache_settings/entrypoint", quiet_errors=(10000, 10001, 10002, 10003))
 existing = (entry.get("result") or {}).get("rules", []) if entry.get("result") else []
 if any(x.get("description") == DESC for x in existing):
     step("cache rule already present")
