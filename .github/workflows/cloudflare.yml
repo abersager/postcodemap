@@ -1,6 +1,13 @@
-# Builds every country's data from the live open sources, uploads it to R2
+# Builds each country's data from the live open sources, uploads it to R2
 # under a versioned prefix and deploys the app to Cloudflare Pages at
 # https://postcodemap.net. Manual trigger only.
+#
+# A country is only rebuilt when something that determines its output has
+# changed: the pipeline scripts, its country module, the Makefile, the Python
+# dependencies or the tippecanoe version. Otherwise its last build is taken
+# from the Actions cache (keyed by a hash of those inputs). Upstream data
+# refreshes (Code-Point Open is quarterly, BEV twice a year, CBS yearly) do
+# not change any file here, so force them with the "rebuild" input.
 #
 # Secrets: CLOUDFLARE_API_TOKEN (permissions in scripts/cloudflare_setup.py),
 #          CLOUDFLARE_ACCOUNT_ID.
@@ -9,6 +16,10 @@ name: Deploy to Cloudflare (R2 + Pages)
 on:
   workflow_dispatch:
     inputs:
+      rebuild:
+        description: "Countries to rebuild from the sources even if cached: comma-separated codes, or 'all'. Empty = only what changed."
+        type: string
+        default: ""
       setup:
         description: "Run the one-time Cloudflare setup (bucket, domains, cache rule) first"
         type: boolean
@@ -18,14 +29,85 @@ env:
   DOMAIN: postcodemap.net
   BUCKET: postcodemap
   PAGES_PROJECT: postcodemap
+  TIPPECANOE_VERSION: 2.79.0
 
 jobs:
+  data:
+    name: Data (${{ matrix.cc }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write   # to drop a stale cache entry on a forced rebuild
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gb, at, nl]   # keep in sync with `countries` in web/config.js
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache key from everything that determines this country's output
+        id: key
+        run: |
+          hash=$(cat Makefile pyproject.toml uv.lock pipeline/*.py pipeline/countries/__init__.py "pipeline/countries/${{ matrix.cc }}.py" | sha256sum | cut -c1-16)
+          echo "key=data-${{ matrix.cc }}-tc${TIPPECANOE_VERSION}-$hash" >> "$GITHUB_OUTPUT"
+          force=false
+          case ",$(echo '${{ inputs.rebuild }}' | tr -d ' ')," in *,all,*|*,${{ matrix.cc }},*) force=true ;; esac
+          echo "force=$force" >> "$GITHUB_OUTPUT"
+          echo "key=data-${{ matrix.cc }}-tc${TIPPECANOE_VERSION}-$hash force=$force"
+      - name: Restore the last build of this country
+        id: cache
+        if: steps.key.outputs.force != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: web/public/countries/${{ matrix.cc }}
+          key: ${{ steps.key.outputs.key }}
+
+      # Everything below runs only when the country has to be (re)built.
+      - uses: astral-sh/setup-uv@v6
+        if: steps.cache.outputs.cache-hit != 'true'
+        with: { enable-cache: true }
+      - name: Restore tippecanoe
+        id: tc
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/tippecanoe-bin
+          key: tippecanoe-${{ env.TIPPECANOE_VERSION }}-${{ runner.os }}
+      - name: Build tippecanoe
+        if: steps.cache.outputs.cache-hit != 'true' && steps.tc.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential libsqlite3-dev zlib1g-dev
+          git clone --depth 1 --branch "$TIPPECANOE_VERSION" https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          make -C /tmp/tippecanoe -j"$(nproc)"
+          mkdir -p ~/tippecanoe-bin && cp /tmp/tippecanoe/tippecanoe /tmp/tippecanoe/tile-join /tmp/tippecanoe/tippecanoe-decode ~/tippecanoe-bin/
+      - name: Build ${{ matrix.cc }}
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          export PATH="$HOME/tippecanoe-bin:$PATH"
+          uv sync
+          make COUNTRY=${{ matrix.cc }}
+          du -sh web/public/countries/${{ matrix.cc }}/*
+      - name: Drop the stale cache entry (forced rebuild)
+        if: steps.key.outputs.force == 'true'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh cache delete "${{ steps.key.outputs.key }}" --repo "$GITHUB_REPOSITORY" || true
+      - name: Save the build
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: web/public/countries/${{ matrix.cc }}
+          key: ${{ steps.key.outputs.key }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: country-${{ matrix.cc }}
+          path: web/public/countries/${{ matrix.cc }}
+          compression-level: 0   # tiles are already compressed
+          retention-days: 1
+
   deploy:
+    needs: data
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with: { enable-cache: true }
       - uses: actions/setup-node@v4
         with: { node-version: "22", cache: npm }
       - name: Cloudflare setup (idempotent)
@@ -35,18 +117,16 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PRODUCTION_BRANCH: ${{ github.ref_name }}
         run: python3 scripts/cloudflare_setup.py
-      - name: Install tippecanoe
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: country-*
+          path: artifacts
+      - name: Collect the countries
         run: |
-          sudo apt-get update && sudo apt-get install -y build-essential libsqlite3-dev zlib1g-dev
-          git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe
-          make -C /tmp/tippecanoe -j"$(nproc)" && sudo make -C /tmp/tippecanoe install
-      - run: uv sync
+          mkdir -p web/public/countries
+          for d in artifacts/country-*; do mv "$d" "web/public/countries/${d#artifacts/country-}"; done
+          du -sh web/public/countries/*
       - run: npm ci
-      - name: Build data (one make per country)
-        run: |
-          make COUNTRY=gb
-          make COUNTRY=at
-          make COUNTRY=nl
       - name: Version
         id: v
         run: echo "ver=$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"

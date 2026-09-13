@@ -114,11 +114,20 @@ requests.
 Pages project; the data archives live in an R2 bucket behind the custom
 domain `data.postcodemap.net` and are served from Cloudflare's cache with
 free egress. `.github/workflows/cloudflare.yml` (run manually from the
-Actions tab) builds every country, uploads `dist/countries` to R2 under a
-versioned prefix `v/<date>-<sha>/` with immutable cache headers, deploys the
-app with `VITE_COUNTRY_BASE` pointing at that prefix, and pre-warms the
-cache. Versioned prefixes mean a deploy never needs a cache purge and never
-breaks a client that is still using the previous version.
+Actions tab) builds each country in its own job, uploads `dist/countries` to
+R2 under a versioned prefix `v/<date>-<sha>/` with immutable cache headers,
+deploys the app with `VITE_COUNTRY_BASE` pointing at that prefix, and
+pre-warms the cache. Versioned prefixes mean a deploy never needs a cache
+purge and never breaks a client that is still using the previous version.
+
+A country is only rebuilt when something that determines its output has
+changed (the pipeline scripts, its module, the Makefile, the Python
+dependencies or the pinned tippecanoe version); otherwise its previous build
+is restored from the Actions cache and the deploy takes a couple of minutes.
+Upstream data refreshes change no file in the repository, so pass the
+countries to refresh in the workflow's `rebuild` input (`gb,at` or `all`).
+The list of countries is the job matrix in the workflow; keep it in step
+with `countries` in `web/config.js`.
 
 `scripts/cloudflare_setup.py` creates everything the workflow needs (bucket,
 CORS for range requests, the custom domain, a cache-everything rule with a
