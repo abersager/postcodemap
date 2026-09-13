@@ -52,20 +52,14 @@ jobs:
       - name: Build site pointing at the data host
         run: npm run build
         env:
-          VITE_COUNTRY_BASE: https://${{ env.DOMAIN }}/v/${{ steps.v.outputs.ver }}/countries/
+          VITE_COUNTRY_BASE: https://data.${{ env.DOMAIN }}/v/${{ steps.v.outputs.ver }}/countries/
       - name: Upload data to R2 (versioned, immutable)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          VER: ${{ steps.v.outputs.ver }}
         run: |
-          cd dist
-          put() { f="$1"; case "$f" in *.json) ct=application/json;; *.pmtiles) ct=application/octet-stream;; *) ct=application/octet-stream;; esac
-                  npx wrangler r2 object put "$BUCKET/v/$VER/$f" --file "$f" --content-type "$ct" --cache-control "public, max-age=31536000, immutable" --remote >/dev/null; }
-          export -f put; export BUCKET VER
-          find countries -type f | xargs -P 12 -I{} bash -c 'put "$@"' _ {}
-          echo "uploaded $(find countries -type f | wc -l) files to v/$VER/"
-          rm -rf countries   # not part of the Pages upload
+          python3 scripts/r2_upload.py dist/countries "$BUCKET" "v/${{ steps.v.outputs.ver }}/countries"
+          rm -rf dist/countries   # not part of the Pages upload
       - name: Deploy app to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
