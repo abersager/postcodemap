@@ -26,10 +26,11 @@ export default {
   density: { enabled: true, baseUnitsPerKm2: 40, maxShift: 2 },
 
   // Every N ms, while the page is visible, send a 1-byte range request to the
-  // tile host so the pooled HTTP connection never sits idle (some network paths
-  // silently drop idle connections and the browser then stalls 10-18 s on the
-  // next request). 0 disables. See README, "Performance".
-  tileKeepAliveMs: 4000,
+  // tile host so the pooled HTTP connection never sits idle. Needed on GitHub
+  // Pages, whose edge dropped idle connections silently on some network paths
+  // (the browser then stalled 10-18 s); measured unnecessary on the Cloudflare
+  // data host. 0 disables. See README, "Performance".
+  tileKeepAliveMs: 0,
 
   // Basemap: any MapLibre style URL. OpenFreeMap needs no key.
   basemap: {

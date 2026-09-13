@@ -111,7 +111,7 @@ Sizes to expect from a full build:
 |----------------------------------------|---------|
 | `countries/gb/boundaries.pmtiles`      | ~30 MB  |
 | `countries/gb/points.pmtiles`          | ~22 MB  |
-| `countries/gb/` search index           | ~60 MB across ~3,000 small JSON files |
+| `countries/gb/index.json` + `units.bin`| ~15 MB (search index; unit lists as gzipped slices fetched by range) |
 | `countries/at/boundaries.pmtiles`      | ~7 MB   |
 | app bundle                             | < 1 MB  |
 
@@ -125,25 +125,24 @@ works, with the two performance caveats below.
 
 ## Performance
 
-Tiles are fetched with HTTP range requests against two PMTiles archives.
-Two things were found to make them slow, both outside the app:
+Tiles are fetched with HTTP range requests against PMTiles archives. On the
+production host (R2 behind Cloudflare's cache) a cold 300 KB range takes
+about 0.12 s from London and subsequent ones are edge cache hits; a
+connection left idle for 20 s answers in 0.03 s. Two problems were found on
+GitHub Pages and are documented so nobody rediscovers them:
 
 - **Idle connections silently dropped.** From the network this was developed
   on, an HTTP connection to GitHub Pages that sits idle for 10–20 s dies
-  without being closed, and the client (Chrome or Python alike) needs 10–18 s
-  to notice and reconnect, so the first tiles after any pause stalled or
-  timed out. A control connection to another host on the same network was
-  unaffected, and the same test from a GitHub Actions runner never stalled,
-  so it is specific to that network path to Fastly's edge, not a general
-  property of either end. The app now sends a 1-byte range request every 4 s
-  while the page is visible (`tileKeepAliveMs` in `web/config.js`), which
-  keeps the connection alive and removed the stalls where they occur.
+  without being closed, and the client needs 10–18 s to notice and
+  reconnect. A control connection to another host on the same network was
+  unaffected, the same test from a GitHub Actions runner never stalled, and
+  the Cloudflare host never stalls, so it is specific to that network path
+  to Fastly's edge. `tileKeepAliveMs` in `web/config.js` (default 0) sends a
+  1-byte range request every N ms to keep the connection warm; set it to
+  4000 when serving from GitHub Pages.
 - **Cold CDN cache.** GitHub Pages caches files for ten minutes; the first
-  range request after that may wait for the whole archive to be fetched, so
-  the archives are kept small (see the size table above).
-
-For consistently fast loads, host the two `.pmtiles` files on Cloudflare R2
-or similar and point `web/config.js` at them.
+  range request after that may wait for the whole archive to be fetched.
+  Cloudflare caches the archives for a year, keyed by the versioned prefix.
 
 ## Repository layout
 
